@@ -473,7 +473,6 @@ urlField.resignFirstResponder()
 }
 @objc private func handleTextSubmit() {
 guard let text = urlField.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
-// If a text box (like Google Search, YouTube Search, or Netflix Email) is focused on the monitor, type directly into it!
 let checkFocusJS = "Boolean(document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA'))"
 externalVC?.webView.evaluateJavaScript(checkFocusJS) { [weak self] result, _ in
 guard let self = self else { return }
@@ -514,9 +513,7 @@ return [v.currentTime, v.duration];
 })();
 """
 webView.evaluateJavaScript(js) { result, _ in
-guard let arr = result as? [Double], arr.count == 2 else { return }
-let cur = arr[0]
-let dur = arr[1]
+guard let arr = result as? [Double], let cur = arr.first, let dur = arr.last, dur > 0 else { return }
 self.videoSlider.value = Float(cur / dur)
 self.timeLabel.text = "(self.formatTime(cur)) / (self.formatTime(dur))"
 }
