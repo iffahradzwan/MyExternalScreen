@@ -5,8 +5,11 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
     var webView: WKWebView!
     let cursorView = UIView()
     private let desktopView = UIView()
-    private let dockView = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
+    private let dockView = UIVisualEffectView(
+        effect: UIBlurEffect(style: .systemThinMaterialDark)
+    )
     private let lastURLKey = "SavedLastVisitedURL"
+    private var isVideoZoomedFull = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -17,8 +20,9 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         setupFloatingDock()
         setupCursor()
 
-        if let savedURL = UserDefaults.standard.string(forKey: lastURLKey), !savedURL.isEmpty {
-            openURL(savedURL)
+        let saved = UserDefaults.standard.string(forKey: lastURLKey) ?? ""
+        if !saved.isEmpty {
+            openURL(saved)
         } else {
             showDesktop()
         }
@@ -44,7 +48,9 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         titleLabel.font = .systemFont(ofSize: 38, weight: .bold)
         titleLabel.textColor = UIColor.white.withAlphaComponent(0.9)
         titleLabel.textAlignment = .center
-        titleLabel.frame = CGRect(x: 0, y: 120, width: view.bounds.width, height: 50)
+        titleLabel.frame = CGRect(
+            x: 0, y: 120, width: view.bounds.width, height: 50
+        )
         titleLabel.autoresizingMask = [.flexibleWidth]
         desktopView.addSubview(titleLabel)
 
@@ -53,7 +59,9 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         subLabel.font = .systemFont(ofSize: 18, weight: .medium)
         subLabel.textColor = UIColor.white.withAlphaComponent(0.6)
         subLabel.textAlignment = .center
-        subLabel.frame = CGRect(x: 0, y: 172, width: view.bounds.width, height: 30)
+        subLabel.frame = CGRect(
+            x: 0, y: 172, width: view.bounds.width, height: 30
+        )
         subLabel.autoresizingMask = [.flexibleWidth]
         desktopView.addSubview(subLabel)
 
@@ -64,21 +72,28 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
+        config.allowsPictureInPictureMediaPlayback = false
+        config.mediaTypesRequiringUserActionForPlayback = [.all]
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
 
-        let scriptSource = #"""
-        setInterval(() => {
-            const skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button__text');
-            if (skipBtn) { skipBtn.click(); }
-            const adOverlay = document.querySelector('.ytp-ad-player-overlay, .ad-showing');
-            const mainVideo = document.querySelector('#movie_player video, .html5-main-video');
-            if (adOverlay && mainVideo && isFinite(mainVideo.duration) && mainVideo.duration > 0) {
-                mainVideo.currentTime = mainVideo.duration;
-            }
-        }, 400);
-        """#
-        let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        // Prevent iOS native video player from hijacking full screen + skip ads
+        let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen = function(){};"
+        let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen = function(){};"
+        let s3 = "setInterval(function(){"
+        let s4 = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
+        let s5 = "var s=document.querySelector('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern');"
+        let s6 = "if(s){s.click();}"
+        let s7 = "var o=document.querySelector('.ytp-ad-player-overlay,.ad-showing');"
+        let s8 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
+        let s9 = "if(o&&v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration;}"
+        let s10 = "},400);"
+        let scriptSource = s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10
+
+        let userScript = WKUserScript(
+            source: scriptSource,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
         config.userContentController.addUserScript(userScript)
 
         webView = WKWebView(frame: view.bounds, configuration: config)
@@ -100,31 +115,46 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
     private func setupFloatingDock() {
         let dockWidth: CGFloat = 460
         let dockHeight: CGFloat = 86
-        dockView.frame = CGRect(x: (view.bounds.width - dockWidth) / 2, y: view.bounds.height - dockHeight - 24, width: dockWidth, height: dockHeight)
+        dockView.frame = CGRect(
+            x: (view.bounds.width - dockWidth) / 2,
+            y: view.bounds.height - dockHeight - 24,
+            width: dockWidth,
+            height: dockHeight
+        )
         dockView.layer.cornerRadius = 24
         dockView.clipsToBounds = true
         dockView.layer.borderWidth = 1
         dockView.layer.borderColor = UIColor.white.withAlphaComponent(0.25).cgColor
-        dockView.autoresizingMask = [.flexibleLeftMargin, .flexibleRightMargin, .flexibleTopMargin]
+        dockView.autoresizingMask = [
+            .flexibleLeftMargin, .flexibleRightMargin, .flexibleTopMargin
+        ]
         view.addSubview(dockView)
 
         let apps: [(String, String, UIColor, Selector)] = [
-            ("Desktop", "macwindow", UIColor.systemIndigo, #selector(showDesktop)),
-            ("YouTube", "play.rectangle.fill", UIColor.systemRed, #selector(launchYouTube)),
-            ("Chrome", "globe", UIColor.systemBlue, #selector(launchChrome)),
-            ("Netflix", "film.fill", UIColor.systemOrange, #selector(launchNetflix))
+            ("Desktop", "macwindow", .systemIndigo, #selector(showDesktop)),
+            ("YouTube", "play.rectangle.fill", .systemRed, #selector(launchYouTube)),
+            ("Chrome", "globe", .systemBlue, #selector(launchChrome)),
+            ("Netflix", "film.fill", .systemOrange, #selector(launchNetflix))
         ]
 
         let itemWidth: CGFloat = 95
         let spacing: CGFloat = 14
-        let startX: CGFloat = (dockWidth - (CGFloat(apps.count) * itemWidth + CGFloat(apps.count - 1) * spacing)) / 2
+        let totalW = CGFloat(apps.count) * itemWidth + CGFloat(apps.count - 1) * spacing
+        let startX: CGFloat = (dockWidth - totalW) / 2
 
         for (i, app) in apps.enumerated() {
             let btn = UIButton(type: .custom)
-            btn.frame = CGRect(x: startX + CGFloat(i) * (itemWidth + spacing), y: 10, width: itemWidth, height: 66)
+            btn.frame = CGRect(
+                x: startX + CGFloat(i) * (itemWidth + spacing),
+                y: 10,
+                width: itemWidth,
+                height: 66
+            )
             btn.addTarget(self, action: app.3, for: .touchUpInside)
 
-            let iconBg = UIView(frame: CGRect(x: (itemWidth - 44) / 2, y: 0, width: 44, height: 44))
+            let iconBg = UIView(
+                frame: CGRect(x: (itemWidth - 44) / 2, y: 0, width: 44, height: 44)
+            )
             iconBg.backgroundColor = app.2
             iconBg.layer.cornerRadius = 12
             iconBg.isUserInteractionEnabled = false
@@ -136,7 +166,9 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
             iconBg.addSubview(iconImg)
             btn.addSubview(iconBg)
 
-            let label = UILabel(frame: CGRect(x: 0, y: 47, width: itemWidth, height: 18))
+            let label = UILabel(
+                frame: CGRect(x: 0, y: 47, width: itemWidth, height: 18)
+            )
             label.text = app.0
             label.font = .systemFont(ofSize: 12, weight: .semibold)
             label.textColor = .white
@@ -177,6 +209,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         desktopView.isHidden = false
         webView.isHidden = true
         dockView.isHidden = false
+        isVideoZoomedFull = false
         UserDefaults.standard.removeObject(forKey: lastURLKey)
     }
 
@@ -188,6 +221,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         desktopView.isHidden = true
         webView.isHidden = false
         dockView.isHidden = true
+        isVideoZoomedFull = false
         UserDefaults.standard.set(urlString, forKey: lastURLKey)
         if let url = URL(string: urlString) {
             webView.load(URLRequest(url: url))
@@ -216,116 +250,73 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         }
 
         if !dockView.isHidden {
-            let pointInDock = view.convert(point, to: dockView.contentView)
-            for subview in dockView.contentView.subviews {
-                if let btn = subview as? UIButton, btn.frame.contains(pointInDock) {
-                    btn.sendActions(for: .touchUpInside)
-                    return
-                }
-            }
-        }
-
-        guard !webView.isHidden else { return }
-        let js = #"""
-        (function() {
-            let el = document.elementFromPoint(\#(point.x), \#(point.y));
-            if (!el) return;
-            const target = el.closest('a, button, [role="button"], input, textarea, select, label, yt-formatted-string, ytd-thumbnail') || el;
-            window.__lastFocusedInput = (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') ? target : target.querySelector('input, textarea');
-if (window.__lastFocusedInput) {
-window.__lastFocusedInput.focus();
-window.__lastFocusedInput.click();
-} else {
-target.focus();
+let pointInDock = view.convert(point, to: dockView.contentView)
+for subview in dockView.contentView.subviews {
+if let btn = subview as? UIButton, btn.frame.contains(pointInDock) {
+btn.sendActions(for: .touchUpInside)
+return
 }
-const opts = { view: window, bubbles: true, cancelable: true, clientX: #(point.x), clientY: #(point.y), pageX: #(point.x) + window.scrollX, pageY: #(point.y) + window.scrollY };
-['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
-target.dispatchEvent(new MouseEvent(type, opts));
-});
-if (target.tagName === 'A' && target.href && !target.href.startsWith('javascript:')) {
-window.location.href = target.href;
 }
-})();
-"""#
-webView.evaluateJavaScript(js, completionHandler: nil)
+}
+guard !webView.isHidden else { return }
+let rx = String(Double(point.x / max(1, view.bounds.width)))
+let ry = String(Double(point.y / max(1, view.bounds.height)))
+let c1 = "(function(){var x=window.innerWidth*" + rx + ";var y=window.innerHeight*" + ry + ";"
+let c2 = "var el=document.elementFromPoint(x,y);if(!el)return;"
+let c3 = "var t=el.closest('a,button,[role=button],input,textarea,select,label,yt-formatted-string,ytd-thumbnail')||el;"
+let c4 = "window.__lastFocusedInput=(t.tagName==='INPUT'||t.tagName==='TEXTAREA')?t:t.querySelector('input,textarea');"
+let c5 = "if(window.__lastFocusedInput){window.__lastFocusedInput.focus();window.__lastFocusedInput.click();}else{t.focus();}"
+let c6 = "var o={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y};"
+let c7 = "['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(k){t.dispatchEvent(new MouseEvent(k,o));});"
+let c8 = "if(typeof t.click==='function'){t.click();}"
+let c9 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0){window.location.href=t.href;}"
+let c10 = "})();"
+webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10, completionHandler: nil)
 }
 func typeTextIntoFocusedInput(_ text: String, submit: Bool) {
-guard let data = try? JSONSerialization.data(withJSONObject: [text], options: []),
-let jsonArray = String(data: data, encoding: .utf8) else { return }
-let js = #"""
-(function() {
-const val = #(jsonArray)[0];
-let input = document.activeElement;
-if (!input || (input.tagName !== 'INPUT' && input.tagName !== 'TEXTAREA')) {
-input = window.__lastFocusedInput || document.querySelector('input[type="search"], input[name="search_query"], input[name="q"], input[type="email"], input[type="text"], input:not([type="hidden"])');
-}
-if (!input) return false;
-input.focus();
-const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-|| Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-if (nativeSetter) {
-nativeSetter.call(input, val);
-} else {
-input.value = val;
-}
-input.dispatchEvent(new Event('input', { bubbles: true }));
-input.dispatchEvent(new Event('change', { bubbles: true }));
-if (#(submit ? "true" : "false")) {
-const form = input.closest('form');
-if (form) {
-form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-form.submit();
-} else {
-input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-}
-}
-return true;
-})();
-"""#
-webView.evaluateJavaScript(js, completionHandler: nil)
+let base64 = Data(text.utf8).base64EncodedString()
+let submitFlag = submit ? "true" : "false"
+let t1 = "(function(){var bin=atob('" + base64 + "');var b=new Uint8Array(bin.length);"
+let t2 = "for(var i=0;i<bin.length;i++){b[i]=bin.charCodeAt(i);}"
+let t3 = "var val=new TextDecoder().decode(b);var inp=document.activeElement;"
+let t4 = "if(!inp||(inp.tagName!=='INPUT'&&inp.tagName!=='TEXTAREA')){"
+let t5 = "inp=window.__lastFocusedInput||document.querySelector('input[type=search],input[name=search_query],input[name=q],input[type=email],input[type=text],input:not([type=hidden])');}"
+let t6 = "if(!inp)return;inp.focus();"
+let t7 = "var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');"
+let t8 = "var ts=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value');"
+let t9 = "if(inp.tagName==='TEXTAREA'&&ts&&ts.set){ts.set.call(inp,val);}else if(s&&s.set){s.set.call(inp,val);}else{inp.value=val;}"
+let t10 = "inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}));"
+let t11 = "if(" + submitFlag + "){var f=inp.closest('form');if(f){f.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));f.submit();}"
+let t12 = "else{inp.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
+let t13 = "inp.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));}}})();"
+webView.evaluateJavaScript(t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t12 + t13, completionHandler: nil)
 }
 func skipVideo(seconds: Double) {
-let js = #"""
-(function() {
-const v = document.querySelector('#movie_player video, .html5-main-video') || document.querySelector('video');
-if (v && isFinite(v.duration)) {
-v.currentTime = Math.min(Math.max(0, v.currentTime + #(seconds)), v.duration);
-}
-})();
-"""#
-webView.evaluateJavaScript(js, completionHandler: nil)
+let sec = String(seconds)
+let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
+let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}})();"
+webView.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
 }
 func seekVideo(fraction: Double) {
-let js = #"""
-(function() {
-const v = document.querySelector('#movie_player video, .html5-main-video') || document.querySelector('video');
-if (v && isFinite(v.duration) && v.duration > 0) {
-v.currentTime = v.duration * #(fraction);
-}
-})();
-"""#
-webView.evaluateJavaScript(js, completionHandler: nil)
+let frac = String(fraction)
+let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
+let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+let k3 = "if(v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*" + frac + ";}})();"
+webView.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
 }
 func toggleFullscreen() {
-let js = #"""
-(function() {
-if (document.fullscreenElement) {
-document.exitFullscreen();
-return;
-}
-const fsBtn = document.querySelector('.ytp-fullscreen-button');
-if (fsBtn) {
-fsBtn.click();
-return;
-}
-const player = document.querySelector('#movie_player') || document.querySelector('video');
-if (player && player.requestFullscreen) {
-player.requestFullscreen();
-}
-})();
-"""#
-webView.evaluateJavaScript(js, completionHandler: nil)
+isVideoZoomedFull.toggle()
+let fullFlag = isVideoZoomedFull ? "true" : "false"
+let f1 = "(function(){var style=document.getElementById('custom-fs-style');"
+let f2 = "if(" + fullFlag + "){"
+let f3 = "var b=document.querySelector('.ytp-fullscreen-button');if(b&&!document.fullscreenElement){b.click();}"
+let f4 = "if(!style){style=document.createElement('style');style.id='custom-fs-style';"
+let f5 = "style.textContent='#movie_player{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:99999!important;background:#000!important;}ytd-masthead,#secondary,#below{display:none!important;}';"
+let f6 = "document.head.appendChild(style);}"
+let f7 = "}else{if(style){style.remove();}if(document.fullscreenElement){document.exitFullscreen();}}"
+let f8 = "})();"
+webView.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8, completionHandler: nil)
 }
 }
 class ViewController: UIViewController {
@@ -359,7 +350,11 @@ let row2: [(String, Selector)] = [
 ]
 let btnW4 = (w - 42) / 4
 for (i, item) in row2.enumerated() {
-let btn = makeSmallButton(title: item.0, frame: CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: 100, width: btnW4, height: 34), action: item.1)
+let btn = makeSmallButton(
+title: item.0,
+frame: CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: 100, width: btnW4, height: 34),
+action: item.1
+)
 view.addSubview(btn)
 }
 let row3: [(String, Selector)] = [
@@ -369,7 +364,11 @@ let row3: [(String, Selector)] = [
 ("Full / Exit", #selector(toggleFullscreen))
 ]
 for (i, item) in row3.enumerated() {
-let btn = makeSmallButton(title: item.0, frame: CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: 140, width: btnW4, height: 34), action: item.1)
+let btn = makeSmallButton(
+title: item.0,
+frame: CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: 140, width: btnW4, height: 34),
+action: item.1
+)
 view.addSubview(btn)
 }
 timeLabel.text = "0:00 / 0:00"
@@ -451,11 +450,10 @@ UIApplication.shared.connectedScenes
 @objc private func forward15() { externalVC?.skipVideo(seconds: 15) }
 @objc private func toggleFullscreen() { externalVC?.toggleFullscreen() }
 @objc private func togglePlayPause() {
-let js = #"""
-const v = document.querySelector('#movie_player video, .html5-main-video') || document.querySelector('video');
-if (v) { v.paused ? v.play() : v.pause(); }
-"""#
-externalVC?.webView.evaluateJavaScript(js, completionHandler: nil)
+let p1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
+let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids[0];"
+let p3 = "if(v){v.paused?v.play():v.pause();}})();"
+externalVC?.webView.evaluateJavaScript(p1 + p2 + p3, completionHandler: nil)
 }
 @objc private func sendTextToPageBox() {
 guard let text = urlField.text, !text.isEmpty else { return }
@@ -465,7 +463,7 @@ urlField.resignFirstResponder()
 }
 @objc private func handleTextSubmit() {
 guard let text = urlField.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
-let checkFocusJS = "Boolean(document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA'))"
+let checkFocusJS = "Boolean(document.activeElement&&(document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA'))"
 externalVC?.webView.evaluateJavaScript(checkFocusJS) { [weak self] result, _ in
 guard let self = self else { return }
 if let isFocused = result as? Bool, isFocused {
@@ -476,10 +474,10 @@ let target: String
 if text.hasPrefix("http://") || text.hasPrefix("https://") {
 target = text
 } else if text.contains(".") && !text.contains(" ") {
-target = "https://(text)"
+target = "https://" + text
 } else {
 let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-target = "google.com"
+target = "google.com" + encoded
 }
 self.externalVC?.openURL(target)
 }
@@ -497,17 +495,13 @@ isScrubbing = false
 private func startVideoProgressTimer() {
 progressTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
 guard let self = self, !self.isScrubbing, let webView = self.externalVC?.webView, !webView.isHidden else { return }
-let js = #"""
-(function() {
-const v = document.querySelector('#movie_player video, .html5-main-video') || document.querySelector('video');
-if (!v || !isFinite(v.duration) || v.duration <= 0) return null;
-return [v.currentTime, v.duration];
-})();
-"""#
-webView.evaluateJavaScript(js) { result, _ in
+let t1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
+let t2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+let t3 = "if(!v||!isFinite(v.duration)||v.duration<=0)return null;return [v.currentTime,v.duration];})();"
+webView.evaluateJavaScript(t1 + t2 + t3) { result, _ in
 guard let arr = result as? [Double], let cur = arr.first, let dur = arr.last, dur > 0 else { return }
 self.videoSlider.value = Float(cur / dur)
-self.timeLabel.text = "(self.formatTime(cur)) / (self.formatTime(dur))"
+self.timeLabel.text = self.formatTime(cur) + " / " + self.formatTime(dur)
 }
 }
 }
