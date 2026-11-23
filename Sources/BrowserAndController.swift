@@ -3,6 +3,7 @@ import WebKit
 
 class ExternalBrowserViewController: UIViewController {
     var webView: WKWebView!
+    let cursorView = UIView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -23,14 +24,6 @@ class ExternalBrowserViewController: UIViewController {
                 video.currentTime = video.duration;
             }
         }, 400);
-
-        // Visible cursor dot on external monitor
-        window.addEventListener('DOMContentLoaded', () => {
-            const dot = document.createElement('div');
-            dot.id = 'custom-cursor-dot';
-            dot.style.cssText = 'position:fixed;width:18px;height:18px;border-radius:50%;background:rgba(255,59,48,0.85);border:2px solid white;pointer-events:none;z-index:999999;left:50%;top:50%;transform:translate(-50%,-50%);';
-            document.body.appendChild(dot);
-        });
         """
         let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         config.userContentController.addUserScript(userScript)
@@ -40,53 +33,148 @@ class ExternalBrowserViewController: UIViewController {
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
         view.addSubview(webView)
 
-        if let url = URL(string: "https://youtube.com") {
+        // Native hardware-accelerated cursor (zero JavaScript lag)
+        cursorView.frame = CGRect(x: 0, y: 0, width: 22, height: 22)
+        cursorView.backgroundColor = UIColor.systemRed.withAlphaComponent(0.9)
+        cursorView.layer.cornerRadius = 11
+        cursorView.layer.borderWidth = 2.5
+        cursorView.layer.borderColor = UIColor.white.cgColor
+        cursorView.layer.shadowColor = UIColor.black.cgColor
+        cursorView.layer.shadowOpacity = 0.6
+        cursorView.layer.shadowRadius = 4
+        cursorView.layer.shadowOffset = CGSize(width: 0, height: 2)
+        cursorView.isUserInteractionEnabled = false
+        view.addSubview(cursorView)
+
+        if let url = URL(string: "https://www.youtube.com") {
             webView.load(URLRequest(url: url))
         }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if cursorView.center == .zero {
+            cursorView.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        }
+    }
+
+    func moveCursor(dx: CGFloat, dy: CGFloat) {
+        let newX = min(max(0, cursorView.center.x + dx), view.bounds.width)
+        let newY = min(max(0, cursorView.center.y + dy), view.bounds.height)
+        cursorView.center = CGPoint(x: newX, y: newY)
+    }
+
+    func clickAtCursor() {
+        let x = cursorView.center.x
+        let y = cursorView.center.y
+
+        UIView.animate(withDuration: 0.08, animations: {
+            self.cursorView.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+        }) { _ in
+            UIView.animate(withDuration: 0.08) {
+                self.cursorView.transform = .identity
+            }
+        }
+
+        let js = """
+        (function() {
+            let el = document.elementFromPoint(\(x), \(y));
+            if (!el) return;
+            const clickable = el.closest('a, button, [role="button"], input, yt-formatted-string, ytd-thumbnail');
+            const target = clickable || el;
+            target.focus();
+            ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
+                target.dispatchEvent(new MouseEvent(type, {
+                    view: window,
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: \(x),
+                    clientY: \(y)
+                }));
+            });
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 }
 
 class ViewController: UIViewController {
     private let urlField = UITextField()
-    private let backBtn = UIButton(type: .system)
     private let trackpadView = UIView()
-    private var cursorX: CGFloat = 640
-    private var cursorY: CGFloat = 360
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
+        let w = view.bounds.width
 
-        backBtn.setTitle("← Back", for: .normal)
-        backBtn.frame = CGRect(x: 16, y: 60, width: 70, height: 44)
-        backBtn.addTarget(self, action: #selector(goBack), for: .touchUpInside)
-        view.addSubview(backBtn)
+        view.addSubview(makeNavButton(title: "←", frame: CGRect(x: 12, y: 56, width: 38, height: 40), action: #selector(goBack)))
+        view.addSubview(makeNavButton(title: "→", frame: CGRect(x: 54, y: 56, width: 38, height: 40), action: #selector(goForward)))
+        view.addSubview(makeNavButton(title: "↻", frame: CGRect(x: 96, y: 56, width: 38, height: 40), action: #selector(reloadPage)))
 
-        urlField.placeholder = "Search YouTube or enter URL..."
+        urlField.placeholder = "Search Google or type URL..."
         urlField.borderStyle = .roundedRect
         urlField.returnKeyType = .go
+        urlField.clearButtonMode = .whileEditing
         urlField.autocapitalizationType = .none
         urlField.autocorrectionType = .no
         urlField.addTarget(self, action: #selector(loadURL), for: .editingDidEndOnExit)
-        urlField.frame = CGRect(x: 92, y: 60, width: view.bounds.width - 108, height: 44)
+        urlField.frame = CGRect(x: 140, y: 56, width: w - 152, height: 40)
         view.addSubview(urlField)
 
-        let hintLabel = UILabel(frame: CGRect(x: 16, y: 112, width: view.bounds.width - 32, height: 24))
-        hintLabel.text = "1 finger: Move cursor  |  Tap: Click  |  2 fingers: Scroll"
-        hintLabel.font = .systemFont(ofSize: 13)
+        let sites: [(String, Selector)] = [
+            ("YouTube", #selector(openYouTube)),
+            ("Google", #selector(openGoogle)),
+            ("Full Screen", #selector(toggleVideoFullscreen)),
+            ("Play/Pause", #selector(togglePlayPause))
+        ]
+        let btnWidth = (w - 42) / 4
+        for (i, item) in sites.enumerated() {
+            let btn = UIButton(type: .system)
+            btn.setTitle(item.0, for: .normal)
+            btn.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+            btn.backgroundColor = .secondarySystemBackground
+            btn.layer.cornerRadius = 8
+            btn.frame = CGRect(x: 12 + CGFloat(i) * (btnWidth + 6), y: 104, width: btnWidth, height: 36)
+            btn.addTarget(self, action: item.1, for: .touchUpInside)
+            view.addSubview(btn)
+        }
+
+        let hintLabel = UILabel(frame: CGRect(x: 12, y: 146, width: w - 24, height: 20))
+        hintLabel.text = "1 finger: Move cursor  •  Tap: Click  •  2 fingers: Scroll"
+        hintLabel.font = .systemFont(ofSize: 12)
         hintLabel.textColor = .secondaryLabel
         hintLabel.textAlignment = .center
         view.addSubview(hintLabel)
 
         trackpadView.backgroundColor = .secondarySystemBackground
         trackpadView.layer.cornerRadius = 16
-        trackpadView.frame = CGRect(x: 16, y: 144, width: view.bounds.width - 32, height: view.bounds.height - 184)
+        trackpadView.frame = CGRect(x: 12, y: 172, width: w - 24, height: view.bounds.height - 204)
         view.addSubview(trackpadView)
 
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        let movePan = UIPanGestureRecognizer(target: self, action: #selector(handleMovePan(_:)))
+        movePan.maximumNumberOfTouches = 1
+
+        let scrollPan = UIPanGestureRecognizer(target: self, action: #selector(handleScrollPan(_:)))
+        scrollPan.minimumNumberOfTouches = 2
+        scrollPan.maximumNumberOfTouches = 2
+
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
-        trackpadView.addGestureRecognizer(pan)
+        tap.require(toFail: movePan)
+
+        trackpadView.addGestureRecognizer(movePan)
+        trackpadView.addGestureRecognizer(scrollPan)
         trackpadView.addGestureRecognizer(tap)
+    }
+
+    private func makeNavButton(title: String, frame: CGRect, action: Selector) -> UIButton {
+        let btn = UIButton(type: .system)
+        btn.setTitle(title, for: .normal)
+        btn.titleLabel?.font = .systemFont(ofSize: 18, weight: .bold)
+        btn.backgroundColor = .secondarySystemBackground
+        btn.layer.cornerRadius = 8
+        btn.frame = frame
+        btn.addTarget(self, action: action, for: .touchUpInside)
+        return btn
     }
 
     private var externalVC: ExternalBrowserViewController? {
@@ -96,49 +184,67 @@ class ViewController: UIViewController {
             .windows.first?.rootViewController as? ExternalBrowserViewController
     }
 
-    @objc private func goBack() {
-        externalVC?.webView.goBack()
+    @objc private func goBack() { externalVC?.webView.goBack() }
+    @objc private func goForward() { externalVC?.webView.goForward() }
+    @objc private func reloadPage() { externalVC?.webView.reload() }
+    @objc private func openYouTube() { loadAddress("https://www.youtube.com") }
+    @objc private func openGoogle() { loadAddress("https://google.com") }
+
+    @objc private func toggleVideoFullscreen() {
+        let js = """
+        const fsBtn = document.querySelector('.ytp-fullscreen-button');
+        if (fsBtn) { fsBtn.click(); }
+        else {
+            const v = document.querySelector('video');
+            if (v) { document.fullscreenElement ? document.exitFullscreen() : v.requestFullscreen(); }
+        }
+        """
+        externalVC?.webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    @objc private func togglePlayPause() {
+        let js = """
+        const v = document.querySelector('video');
+        if (v) { v.paused ? v.play() : v.pause(); }
+        """
+        externalVC?.webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func loadAddress(_ urlString: String) {
+        if let url = URL(string: urlString) {
+            externalVC?.webView.load(URLRequest(url: url))
+        }
     }
 
     @objc private func loadURL() {
-        guard let text = urlField.text, !text.isEmpty else { return }
-        let target = text.starts(with: "http") ? text : "https://youtube.com/results?search_query=\(text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
-        if let url = URL(string: target) {
-            externalVC?.webView.load(URLRequest(url: url))
+        guard let text = urlField.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
+        let target: String
+        if text.hasPrefix("http://") || text.hasPrefix("https://") {
+            target = text
+        } else if text.contains(".") && !text.contains(" ") {
+            target = "https://\(text)"
+        } else {
+            let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            target = "https://google.com/search?q=\(encoded)"
         }
+        loadAddress(target)
         urlField.resignFirstResponder()
     }
 
-    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        guard let webView = externalVC?.webView else { return }
-        let delta = gesture.translation(in: trackpadView)
-        gesture.setTranslation(.zero, in: trackpadView)
-
-        if gesture.numberOfTouches >= 2 {
-            let newY = max(0, webView.scrollView.contentOffset.y - delta.y * 1.8)
-            webView.scrollView.setContentOffset(CGPoint(x: 0, y: newY), animated: false)
-        } else {
-            cursorX = min(max(0, cursorX + delta.x * 2.2), webView.bounds.width)
-            cursorY = min(max(0, cursorY + delta.y * 2.2), webView.bounds.height)
-            let js = """
-            const dot = document.getElementById('custom-cursor-dot');
-            if (dot) { dot.style.left = '\(cursorX)px'; dot.style.top = '\(cursorY)px'; }
-            """
-            webView.evaluateJavaScript(js)
-        }
-    }
-
-    @objc private func handleTap() {
-        guard let webView = externalVC?.webView else { return }
-        let js = """
-        const el = document.elementFromPoint(\(cursorX), \(cursorY));
-        if (el) {
-            el.focus();
-            el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, clientX: \(cursorX), clientY: \(cursorY)}));
-            el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, clientX: \(cursorX), clientY: \(cursorY)}));
-            el.click();
-        }
-        """
-        webView.evaluateJavaScript(js)
-    }
+    @objc private func handleMovePan(_ gesture: UIPanGestureRecognizer) {
+        guard let ext = externalVC else { return }
+let delta = gesture.translation(in: trackpadView)
+gesture.setTranslation(.zero, in: trackpadView)
+ext.moveCursor(dx: delta.x * 2.2, dy: delta.y * 2.2)
+}
+@objc private func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
+guard let webView = externalVC?.webView else { return }
+let delta = gesture.translation(in: trackpadView)
+gesture.setTranslation(.zero, in: trackpadView)
+let newY = max(0, webView.scrollView.contentOffset.y - delta.y * 2.0)
+webView.scrollView.setContentOffset(CGPoint(x: 0, y: newY), animated: false)
+}
+@objc private func handleTap() {
+externalVC?.clickAtCursor()
+}
 }
