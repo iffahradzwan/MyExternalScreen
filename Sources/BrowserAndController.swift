@@ -67,8 +67,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         config.mediaTypesRequiringUserActionForPlayback = []
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
 
-        let scriptSource = """
-        // Auto-skip YouTube ads safely without touching homepage hover previews
+        let scriptSource = #"""
         setInterval(() => {
             const skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button__text');
             if (skipBtn) { skipBtn.click(); }
@@ -78,7 +77,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
                 mainVideo.currentTime = mainVideo.duration;
             }
         }, 400);
-        """
+        """#
         let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         config.userContentController.addUserScript(userScript)
 
@@ -227,19 +226,19 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         }
 
         guard !webView.isHidden else { return }
-        let js = """
+        let js = #"""
         (function() {
-            let el = document.elementFromPoint(\(point.x), \(point.y));
+            let el = document.elementFromPoint(\#(point.x), \#(point.y));
             if (!el) return;
             const target = el.closest('a, button, [role="button"], input, textarea, select, label, yt-formatted-string, ytd-thumbnail') || el;
-window.__lastFocusedInput = (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') ? target : target.querySelector('input, textarea');
+            window.__lastFocusedInput = (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') ? target : target.querySelector('input, textarea');
 if (window.__lastFocusedInput) {
 window.__lastFocusedInput.focus();
 window.__lastFocusedInput.click();
 } else {
 target.focus();
 }
-const opts = { view: window, bubbles: true, cancelable: true, clientX: (point.x), clientY: (point.y), pageX: (point.x) + window.scrollX, pageY: (point.y) + window.scrollY };
+const opts = { view: window, bubbles: true, cancelable: true, clientX: #(point.x), clientY: #(point.y), pageX: #(point.x) + window.scrollX, pageY: #(point.y) + window.scrollY };
 ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
 target.dispatchEvent(new MouseEvent(type, opts));
 });
@@ -247,16 +246,15 @@ if (target.tagName === 'A' && target.href && !target.href.startsWith('javascript
 window.location.href = target.href;
 }
 })();
-"""
+"""#
 webView.evaluateJavaScript(js, completionHandler: nil)
 }
 func typeTextIntoFocusedInput(_ text: String, submit: Bool) {
-let escaped = text
-.replacingOccurrences(of: "\", with: "\\")
-.replacingOccurrences(of: """, with: "\"")
-.replacingOccurrences(of: "\n", with: "\n")
-let js = """
+guard let data = try? JSONSerialization.data(withJSONObject: [text], options: []),
+let jsonArray = String(data: data, encoding: .utf8) else { return }
+let js = #"""
 (function() {
+const val = #(jsonArray)[0];
 let input = document.activeElement;
 if (!input || (input.tagName !== 'INPUT' && input.tagName !== 'TEXTAREA')) {
 input = window.__lastFocusedInput || document.querySelector('input[type="search"], input[name="search_query"], input[name="q"], input[type="email"], input[type="text"], input:not([type="hidden"])');
@@ -266,13 +264,13 @@ input.focus();
 const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
 || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
 if (nativeSetter) {
-nativeSetter.call(input, "(escaped)");
+nativeSetter.call(input, val);
 } else {
-input.value = "(escaped)";
+input.value = val;
 }
 input.dispatchEvent(new Event('input', { bubbles: true }));
 input.dispatchEvent(new Event('change', { bubbles: true }));
-if ((submit ? "true" : "false")) {
+if (#(submit ? "true" : "false")) {
 const form = input.closest('form');
 if (form) {
 form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -284,33 +282,33 @@ input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', ke
 }
 return true;
 })();
-"""
+"""#
 webView.evaluateJavaScript(js, completionHandler: nil)
 }
 func skipVideo(seconds: Double) {
-let js = """
+let js = #"""
 (function() {
 const v = document.querySelector('#movie_player video, .html5-main-video') || document.querySelector('video');
 if (v && isFinite(v.duration)) {
-v.currentTime = Math.min(Math.max(0, v.currentTime + (seconds)), v.duration);
+v.currentTime = Math.min(Math.max(0, v.currentTime + #(seconds)), v.duration);
 }
 })();
-"""
+"""#
 webView.evaluateJavaScript(js, completionHandler: nil)
 }
 func seekVideo(fraction: Double) {
-let js = """
+let js = #"""
 (function() {
 const v = document.querySelector('#movie_player video, .html5-main-video') || document.querySelector('video');
 if (v && isFinite(v.duration) && v.duration > 0) {
-v.currentTime = v.duration * (fraction);
+v.currentTime = v.duration * #(fraction);
 }
 })();
-"""
+"""#
 webView.evaluateJavaScript(js, completionHandler: nil)
 }
 func toggleFullscreen() {
-let js = """
+let js = #"""
 (function() {
 if (document.fullscreenElement) {
 document.exitFullscreen();
@@ -326,7 +324,7 @@ if (player && player.requestFullscreen) {
 player.requestFullscreen();
 }
 })();
-"""
+"""#
 webView.evaluateJavaScript(js, completionHandler: nil)
 }
 }
@@ -341,7 +339,6 @@ override func viewDidLoad() {
 super.viewDidLoad()
 view.backgroundColor = .systemBackground
 let w = view.bounds.width
-// Row 1: Navigation + URL / Input Bar
 view.addSubview(makeNavButton(title: "⌂", frame: CGRect(x: 12, y: 54, width: 38, height: 38), action: #selector(goHome)))
 view.addSubview(makeNavButton(title: "←", frame: CGRect(x: 54, y: 54, width: 38, height: 38), action: #selector(goBack)))
 view.addSubview(makeNavButton(title: "→", frame: CGRect(x: 96, y: 54, width: 38, height: 38), action: #selector(goForward)))
@@ -354,7 +351,6 @@ urlField.autocorrectionType = .no
 urlField.addTarget(self, action: #selector(handleTextSubmit), for: .editingDidEndOnExit)
 urlField.frame = CGRect(x: 140, y: 54, width: w - 152, height: 38)
 view.addSubview(urlField)
-// Row 2: App & Text Injection Shortcuts
 let row2: [(String, Selector)] = [
 ("YouTube", #selector(openYouTube)),
 ("Chrome", #selector(openChrome)),
@@ -366,7 +362,6 @@ for (i, item) in row2.enumerated() {
 let btn = makeSmallButton(title: item.0, frame: CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: 100, width: btnW4, height: 34), action: item.1)
 view.addSubview(btn)
 }
-// Row 3: Video Playback & Full-Screen Controls
 let row3: [(String, Selector)] = [
 ("-15s", #selector(rewind15)),
 ("Play/Pause", #selector(togglePlayPause)),
@@ -377,7 +372,6 @@ for (i, item) in row3.enumerated() {
 let btn = makeSmallButton(title: item.0, frame: CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: 140, width: btnW4, height: 34), action: item.1)
 view.addSubview(btn)
 }
-// Row 4: Video Scrubbing Slider + Timestamp
 timeLabel.text = "0:00 / 0:00"
 timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
 timeLabel.textColor = .secondaryLabel
@@ -392,14 +386,12 @@ videoSlider.addTarget(self, action: #selector(sliderTouchDown), for: .touchDown)
 videoSlider.addTarget(self, action: #selector(sliderChanged), for: .valueChanged)
 videoSlider.addTarget(self, action: #selector(sliderTouchUp), for: [.touchUpInside, .touchUpOutside])
 view.addSubview(videoSlider)
-// Row 5: Trackpad Hint
 let hintLabel = UILabel(frame: CGRect(x: 12, y: 214, width: w - 24, height: 18))
 hintLabel.text = "1-finger: Cursor • Tap: Click • Double-tap L/R: ±15s • 2-finger: Scroll/Zoom"
 hintLabel.font = .systemFont(ofSize: 10.5)
 hintLabel.textColor = .secondaryLabel
 hintLabel.textAlignment = .center
 view.addSubview(hintLabel)
-// Trackpad Surface
 trackpadView.backgroundColor = .secondarySystemBackground
 trackpadView.layer.cornerRadius = 16
 trackpadView.frame = CGRect(x: 12, y: 236, width: w - 24, height: view.bounds.height - 264)
@@ -459,10 +451,10 @@ UIApplication.shared.connectedScenes
 @objc private func forward15() { externalVC?.skipVideo(seconds: 15) }
 @objc private func toggleFullscreen() { externalVC?.toggleFullscreen() }
 @objc private func togglePlayPause() {
-let js = """
+let js = #"""
 const v = document.querySelector('#movie_player video, .html5-main-video') || document.querySelector('video');
 if (v) { v.paused ? v.play() : v.pause(); }
-"""
+"""#
 externalVC?.webView.evaluateJavaScript(js, completionHandler: nil)
 }
 @objc private func sendTextToPageBox() {
@@ -505,13 +497,13 @@ isScrubbing = false
 private func startVideoProgressTimer() {
 progressTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
 guard let self = self, !self.isScrubbing, let webView = self.externalVC?.webView, !webView.isHidden else { return }
-let js = """
+let js = #"""
 (function() {
 const v = document.querySelector('#movie_player video, .html5-main-video') || document.querySelector('video');
 if (!v || !isFinite(v.duration) || v.duration <= 0) return null;
 return [v.currentTime, v.duration];
 })();
-"""
+"""#
 webView.evaluateJavaScript(js) { result, _ in
 guard let arr = result as? [Double], let cur = arr.first, let dur = arr.last, dur > 0 else { return }
 self.videoSlider.value = Float(cur / dur)
