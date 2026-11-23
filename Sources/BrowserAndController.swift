@@ -24,8 +24,8 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         super.viewDidLoad()
         view.backgroundColor = .black
 
-        setupDesktopWallpaper()
         setupWebView()
+        setupDesktopWallpaper()
         setupChromeTopBar()
         setupFloatingDock()
         setupCursor()
@@ -148,11 +148,10 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         webView.scrollView.minimumZoomScale = 0.5
         webView.scrollView.maximumZoomScale = 3.0
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
-        webView.isHidden = true
+        // Keep webView unhidden behind desktopView so WebKit never suspends its GPU surface!
         view.addSubview(webView)
     }
 
-    // Desktop-style Google Chrome Top Tab Strip on the External Monitor!
     private func setupChromeTopBar() {
         chromeTopBar.backgroundColor = UIColor(red: 0.13, green: 0.14, blue: 0.17, alpha: 1)
         chromeTopBar.isHidden = true
@@ -309,14 +308,24 @@ cursorView.layer.shadowOffset = CGSize(width: 0, height: 2)
 cursorView.isUserInteractionEnabled = false
 view.addSubview(cursorView)
 }
+private func navigateWebView(to urlString: String) {
+webView.stopLoading()
+if let url = URL(string: urlString) {
+var req = URLRequest(url: url)
+req.cachePolicy = .reloadIgnoringLocalCacheData
+webView.load(req)
+}
+}
 @objc func showDesktop() {
 pauseAllMediaOnBackground()
 isChromeMode = false
 isVideoZoomedFull = false
 chromeTopBar.isHidden = true
-webView.isHidden = true
 desktopView.isHidden = false
 dockView.isHidden = false
+view.bringSubviewToFront(desktopView)
+view.bringSubviewToFront(dockView)
+view.bringSubviewToFront(cursorView)
 UserDefaults.standard.removeObject(forKey: lastURLKey)
 }
 @objc func launchYouTube() { openSingleApp("youtube.com") }
@@ -328,12 +337,13 @@ isVideoZoomedFull = false
 chromeTopBar.isHidden = true
 desktopView.isHidden = true
 dockView.isHidden = true
-webView.frame = view.bounds
 webView.isHidden = false
+webView.frame = view.bounds
+view.bringSubviewToFront(webView)
+view.bringSubviewToFront(dockView)
+view.bringSubviewToFront(cursorView)
 UserDefaults.standard.set(urlString, forKey: lastURLKey)
-if let url = URL(string: urlString) {
-webView.load(URLRequest(url: url))
-}
+navigateWebView(to: urlString)
 }
 func launchChrome(urlString: String = "google.com") {
 isChromeMode = true
@@ -341,8 +351,12 @@ isVideoZoomedFull = false
 desktopView.isHidden = true
 dockView.isHidden = true
 chromeTopBar.isHidden = false
-webView.frame = CGRect(x: 0, y: 42, width: view.bounds.width, height: max(100, view.bounds.height - 42))
 webView.isHidden = false
+webView.frame = CGRect(x: 0, y: 42, width: view.bounds.width, height: max(100, view.bounds.height - 42))
+view.bringSubviewToFront(webView)
+view.bringSubviewToFront(chromeTopBar)
+view.bringSubviewToFront(dockView)
+view.bringSubviewToFront(cursorView)
 if chromeTabURLs.isEmpty {
 chromeTabURLs = [urlString]
 chromeTabTitles = ["Google"]
@@ -352,9 +366,7 @@ chromeTabURLs[activeChromeTab] = urlString
 }
 rebuildMonitorChromeTabs()
 UserDefaults.standard.set(urlString, forKey: lastURLKey)
-if let url = URL(string: urlString) {
-webView.load(URLRequest(url: url))
-}
+navigateWebView(to: urlString)
 }
 func addChromeTab(urlString: String = "google.com") {
 isChromeMode = true
@@ -383,6 +395,8 @@ launchChrome(urlString: chromeTabURLs[activeChromeTab])
 }
 func toggleDock() {
 dockView.isHidden.toggle()
+view.bringSubviewToFront(dockView)
+view.bringSubviewToFront(cursorView)
 }
 func moveCursor(dx: CGFloat, dy: CGFloat) {
 let newX = min(max(0, cursorView.center.x + dx), view.bounds.width)
@@ -398,7 +412,6 @@ UIView.animate(withDuration: 0.08) {
 self.cursorView.transform = .identity
 }
 }
-// Check Desktop Dock clicks
 if !dockView.isHidden {
 let pointInDock = view.convert(point, to: dockView.contentView)
 for subview in dockView.contentView.subviews {
@@ -408,7 +421,6 @@ return
 }
 }
 }
-// Check Chrome Top Tab Bar clicks on the Monitor!
 if !chromeTopBar.isHidden && point.y <= 42 {
 let ptInScroll = view.convert(point, to: chromeTabScroll)
 for sub in chromeTabScroll.subviews {
@@ -430,7 +442,7 @@ return
 }
 return
 }
-guard !webView.isHidden else { return }
+guard desktopView.isHidden else { return }
 let webPoint = view.convert(point, to: webView)
 let scale = max(0.1, webView.scrollView.zoomScale)
 let px = String(Double(webPoint.x / scale))
