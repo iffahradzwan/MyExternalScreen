@@ -259,51 +259,64 @@ return
 }
 }
 guard !webView.isHidden else { return }
-// Exact 1:1 coordinate mapping (fixes vertical click offset on Google/Netflix)
 let scale = max(0.1, webView.scrollView.zoomScale)
 let px = String(Double(point.x / scale))
 let py = String(Double(point.y / scale))
+// Strictly exclude input[type=file] so iOS never opens Photo Library / Choose File!
+let txtSel = "textarea,input:not([type=hidden]):not([type=file]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio])"
 let c1 = "(function(){var x=" + px + ";var y=" + py + ";"
 let c2 = "var el=document.elementFromPoint(x,y);if(!el)return null;"
-let c3 = "var inp=(el.tagName==='INPUT'||el.tagName==='TEXTAREA')?el:el.closest('input,textarea');"
-let c4 = "if(!inp){var box=el.closest('form,[role=search],[role=combobox],label');if(box){inp=box.querySelector('input:not([type=hidden]),textarea');}}"
-let c5 = "if(inp){window.__lastFocusedInput=inp;inp.focus();inp.click();return {isInput:true,val:(inp.value||'')};}"
+let c3 = "var inp=el.matches('" + txtSel + "')?el:el.closest('" + txtSel + "');"
+let c4 = "if(!inp&&!el.closest('button,[role=button],a,[role=option],li')){var box=el.closest('[role=search],[role=combobox],.RNNXgb,.ytSearchboxComponentInputBox');if(box){inp=box.querySelector('" + txtSel + "');}}"
+let c5 = "if(inp){window.__lastFocusedInput=inp;inp.focus();return {isInput:true,val:(inp.value||'')};}"
 let c6 = "window.__lastFocusedInput=null;"
-let c7 = "var t=el.closest('a,button,[role=button],[role=tab],[role=link],select,label,yt-formatted-string,ytd-thumbnail')||el;"
-let c8 = "t.focus();var o={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y};"
-let c9 = "['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(k){t.dispatchEvent(new MouseEvent(k,o));});"
-let c10 = "if(typeof t.click==='function'){t.click();}"
-let c11 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0){window.location.href=t.href;}"
-let c12 = "return {isInput:false,val:''};})();"
-webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12) { [weak self] res, _ in
-guard let dict = res as? [String: Any], let isInput = dict["isInput"] as? Bool, isInput else { return }
+let c7 = "if(el.closest('.ytp-fullscreen-button')){return {isInput:false,hitFullscreen:true};}"
+let c8 = "var t=el.closest('a,button,[role=button],[role=option],[role=tab],[role=link],[role=menuitem],[role=menuitemradio],[role=menuitemcheckbox],.ytp-menuitem,li,select,label,yt-formatted-string,ytd-thumbnail')||el;"
+let c9 = "if(t.focus){t.focus();}"
+let c10 = "var po={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:1,pointerType:'mouse',isPrimary:true,button:0,buttons:1};"
+let c11 = "var mo={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y,button:0,buttons:1};"
+let c12 = "if(window.PointerEvent){t.dispatchEvent(new PointerEvent('pointerdown',po));}"
+let c13 = "t.dispatchEvent(new MouseEvent('mousedown',mo));"
+let c14 = "if(window.PointerEvent){t.dispatchEvent(new PointerEvent('pointerup',po));}"
+let c15 = "t.dispatchEvent(new MouseEvent('mouseup',mo));"
+let c16 = "t.dispatchEvent(new MouseEvent('click',mo));"
+let c17 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0){window.location.href=t.href;}"
+let c18 = "return {isInput:false,hitFullscreen:false};})();"
+webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18) { [weak self] res, _ in
+guard let dict = res as? [String: Any] else { return }
+if let hitFS = dict["hitFullscreen"] as? Bool, hitFS {
+self?.toggleFullscreen()
+return
+}
+if let isInput = dict["isInput"] as? Bool, isInput {
 let existingText = (dict["val"] as? String) ?? ""
 self?.onInputSelected?(existingText)
+}
 }
 }
 func typeTextIntoFocusedInput(_ text: String, submit: Bool) {
 let base64 = Data(text.utf8).base64EncodedString()
 let submitFlag = submit ? "true" : "false"
+let txtSel = "textarea,input:not([type=hidden]):not([type=file]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio])"
 let t1 = "(function(){var bin=atob('" + base64 + "');var b=new Uint8Array(bin.length);"
 let t2 = "for(var i=0;i<bin.length;i++){b[i]=bin.charCodeAt(i);}"
 let t3 = "var val=new TextDecoder().decode(b);var inp=window.__lastFocusedInput||document.activeElement;"
-let t4 = "if(!inp||(inp.tagName!=='INPUT'&&inp.tagName!=='TEXTAREA')){"
-let t5 = "inp=document.querySelector('input[type=search],input[name=search_query],input[name=q],input[type=email],input[type=text],textarea');}"
-let t6 = "if(!inp)return;window.__lastFocusedInput=inp;inp.focus();"
-let t7 = "var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');"
-let t8 = "var ts=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value');"
-let t9 = "if(inp.tagName==='TEXTAREA'&&ts&&ts.set){ts.set.call(inp,val);}else if(s&&s.set){s.set.call(inp,val);}else{inp.value=val;}"
-let t10 = "inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}));"
-let t11 = "if(" + submitFlag + "){"
-let t12 = "inp.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
-let t13 = "inp.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
-let t14 = "inp.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
-let t15 = "var f=inp.closest('form');if(f){f.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));f.submit();}"
-let t16 = "}})();"
-webView.evaluateJavaScript(t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t12 + t13 + t14 + t15 + t16, completionHandler: nil)
+let t4 = "if(!inp||!inp.matches('" + txtSel + "')){inp=document.querySelector('" + txtSel + "');}"
+let t5 = "if(!inp)return;window.__lastFocusedInput=inp;inp.focus();"
+let t6 = "var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');"
+let t7 = "var ts=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value');"
+let t8 = "if(inp.tagName==='TEXTAREA'&&ts&&ts.set){ts.set.call(inp,val);}else if(s&&s.set){s.set.call(inp,val);}else{inp.value=val;}"
+let t9 = "inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}));"
+let t10 = "if(" + submitFlag + "){"
+let t11 = "inp.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
+let t12 = "inp.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
+let t13 = "inp.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
+let t14 = "var f=inp.closest('form');if(f){f.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));f.submit();}"
+let t15 = "}})();"
+webView.evaluateJavaScript(t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t12 + t13 + t14 + t15, completionHandler: nil)
 }
 func hasFocusedInput(completion: @escaping (Bool) -> Void) {
-let js = "Boolean(window.__lastFocusedInput || (document.activeElement && (document.activeElement.tagName==='INPUT' || document.activeElement.tagName==='TEXTAREA')))"
+let js = "Boolean(window.__lastFocusedInput)"
 webView.evaluateJavaScript(js) { res, _ in
 completion((res as? Bool) ?? false)
 }
@@ -325,7 +338,6 @@ webView.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
 func toggleFullscreen() {
 isVideoZoomedFull.toggle()
 let fullFlag = isVideoZoomedFull ? "true" : "false"
-// Clean CSS viewport full-screen (avoids WebKit's "browser does not support full screen" error)
 let f1 = "(function(){var style=document.getElementById('custom-fs-style');"
 let f2 = "if(" + fullFlag + "){"
 let f3 = "if(!style){style=document.createElement('style');style.id='custom-fs-style';"
