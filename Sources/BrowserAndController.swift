@@ -38,7 +38,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         setupCursor()
 
         let saved = UserDefaults.standard.string(forKey: lastURLKey) ?? ""
-        if !saved.isEmpty {
+        if saved.hasPrefix("http") {
             if saved.contains("google.com") {
                 launchChrome(urlString: saved)
             } else {
@@ -91,11 +91,8 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
 
     private func makeConfiguredWebView() -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
-        config.allowsPictureInPictureMediaPlayback = false
         config.mediaTypesRequiringUserActionForPlayback = []
-        config.preferences.javaScriptCanOpenWindowsAutomatically = true
 
         let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen = function(){};"
         let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen = function(){};"
@@ -140,7 +137,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        if webView === activeWebView, let current = webView.url?.absoluteString, !current.isEmpty {
+        if webView === activeWebView, let current = webView.url?.absoluteString, current.hasPrefix("http") {
             UserDefaults.standard.set(current, forKey: lastURLKey)
         }
         onStateChanged?()
@@ -249,10 +246,13 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
     @objc func showDesktop() {
         isChromeMode = false
         isVideoZoomedFull = false
-hideAllWebViews()
-desktopView.isHidden = false
-dockView.isHidden = false
-UserDefaults.standard.removeObject(forKey: lastURLKey)
+        hideAllWebViews()
+        desktopView.isHidden = false
+        dockView.isHidden = false
+        UserDefaults.standard.removeObject(forKey: lastURLKey)
+view.bringSubviewToFront(desktopView)
+view.bringSubviewToFront(dockView)
+view.bringSubviewToFront(cursorView)
 onStateChanged?()
 }
 @objc func launchYouTube() { openSingleApp("youtube.com") }
@@ -266,6 +266,9 @@ dockView.isHidden = true
 hideAllWebViews()
 mainWebView.frame = view.bounds
 mainWebView.isHidden = false
+view.bringSubviewToFront(mainWebView)
+view.bringSubviewToFront(dockView)
+view.bringSubviewToFront(cursorView)
 UserDefaults.standard.set(urlString, forKey: lastURLKey)
 if let url = URL(string: urlString) {
 mainWebView.load(URLRequest(url: url))
@@ -310,8 +313,12 @@ desktopView.isHidden = true
 dockView.isHidden = true
 activeChromeTab = index
 hideAllWebViews()
-chromeTabs[index].frame = view.bounds
-chromeTabs[index].isHidden = false
+let active = chromeTabs[index]
+active.frame = view.bounds
+active.isHidden = false
+view.bringSubviewToFront(active)
+view.bringSubviewToFront(dockView)
+view.bringSubviewToFront(cursorView)
 observeActiveProgress()
 onStateChanged?()
 }
@@ -329,6 +336,8 @@ onStateChanged?()
 }
 func toggleDock() {
 dockView.isHidden.toggle()
+view.bringSubviewToFront(dockView)
+view.bringSubviewToFront(cursorView)
 }
 func moveCursor(dx: CGFloat, dy: CGFloat) {
 let newX = min(max(0, cursorView.center.x + dx), view.bounds.width)
@@ -455,7 +464,6 @@ override func viewDidLoad() {
 super.viewDidLoad()
 view.backgroundColor = .systemBackground
 let w = view.bounds.width
-// Row 1: Navigation + Reload/Stop + URL/Input Bar
 view.addSubview(makeNavButton(title: "⌂", frame: CGRect(x: 10, y: 52, width: 34, height: 36), action: #selector(goHome)))
 view.addSubview(makeNavButton(title: "←", frame: CGRect(x: 48, y: 52, width: 34, height: 36), action: #selector(goBack)))
 view.addSubview(makeNavButton(title: "→", frame: CGRect(x: 86, y: 52, width: 34, height: 36), action: #selector(goForward)))
@@ -476,13 +484,11 @@ urlField.addTarget(self, action: #selector(liveTextChanged), for: .editingChange
 urlField.addTarget(self, action: #selector(handleTextSubmit), for: .editingDidEndOnExit)
 urlField.frame = CGRect(x: 162, y: 52, width: w - 172, height: 36)
 view.addSubview(urlField)
-// Loading bar
 loadingBar.frame = CGRect(x: 10, y: 90, width: w - 20, height: 3)
 loadingBar.progressTintColor = .systemBlue
 loadingBar.trackTintColor = .clear
 loadingBar.isHidden = true
 view.addSubview(loadingBar)
-// Row 2: App & Input Shortcuts
 let row2: [(String, Selector)] = [
 ("YouTube", #selector(openYouTube)),
 ("Chrome", #selector(openChrome)),
@@ -498,7 +504,6 @@ action: item.1
 )
 view.addSubview(btn)
 }
-// Row 3: Media Controls
 let row3: [(String, Selector)] = [
 ("-15s", #selector(rewind15)),
 ("Play/Pause", #selector(togglePlayPause)),
@@ -513,7 +518,6 @@ action: item.1
 )
 view.addSubview(btn)
 }
-// Row 4: Video Slider + Timestamp
 timeLabel.text = "0:00 / 0:00"
 timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
 timeLabel.textColor = .secondaryLabel
@@ -528,12 +532,10 @@ videoSlider.addTarget(self, action: #selector(sliderTouchDown), for: .touchDown)
 videoSlider.addTarget(self, action: #selector(sliderChanged), for: .valueChanged)
 videoSlider.addTarget(self, action: #selector(sliderTouchUp), for: [.touchUpInside, .touchUpOutside])
 view.addSubview(videoSlider)
-// Chrome-Only Tabs Bar (Hidden in YouTube/Netflix/Desktop!)
 chromeTabScroll.frame = CGRect(x: 10, y: 204, width: w - 20, height: 32)
 chromeTabScroll.showsHorizontalScrollIndicator = false
 chromeTabScroll.isHidden = true
 view.addSubview(chromeTabScroll)
-// Trackpad Surface
 trackpadView.backgroundColor = .secondarySystemBackground
 trackpadView.layer.cornerRadius = 16
 trackpadView.frame = CGRect(x: 10, y: 206, width: w - 20, height: view.bounds.height - 232)
@@ -587,7 +589,6 @@ loadingBar.isHidden = true
 loadingBar.progress = 0
 reloadBtn.setTitle("↻", for: .normal)
 }
-// Show Chrome tabs ONLY when Chrome mode is active
 chromeTabScroll.isHidden = !ext.isChromeMode
 let padTop: CGFloat = ext.isChromeMode ? 242 : 206
 trackpadView.frame = CGRect(x: 10, y: padTop, width: w - 20, height: view.bounds.height - padTop - 26)
