@@ -2,17 +2,10 @@ import UIKit
 import WebKit
 
 class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
-    var mainWebView: WKWebView!
-    var chromeTabs: [WKWebView] = []
+    var webView: WKWebView!
+    var chromeTabURLs: [String] = []
     var activeChromeTab: Int = 0
     var isChromeMode: Bool = false
-
-    var activeWebView: WKWebView? {
-        if isChromeMode {
-            return chromeTabs.indices.contains(activeChromeTab) ? chromeTabs[activeChromeTab] : nil
-        }
-        return mainWebView
-    }
 
     let cursorView = UIView()
     private let desktopView = UIView()
@@ -21,6 +14,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
     )
     private let lastURLKey = "SavedLastVisitedURL"
     private var isVideoZoomedFull = false
+    private var didInitialLoad = false
     var onInputSelected: ((String) -> Void)?
     var onStateChanged: (() -> Void)?
     private var progressObs: NSKeyValueObservation?
@@ -30,23 +24,50 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         view.backgroundColor = .black
 
         setupDesktopWallpaper()
-        mainWebView = makeConfiguredWebView()
-        mainWebView.isHidden = true
-        view.addSubview(mainWebView)
-
+        setupSingleWebView()
         setupFloatingDock()
         setupCursor()
 
-        let saved = UserDefaults.standard.string(forKey: lastURLKey) ?? ""
-        if saved.hasPrefix("http") {
-            if saved.contains("google.com") {
-                launchChrome(urlString: saved)
-            } else {
-                openSingleApp(saved)
-            }
-        } else {
-            showDesktop()
+        // Pause audio automatically when you swipe out of the app
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(pauseAllMediaOnBackground),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if let gradient = desktopView.layer.sublayers?.first as? CAGradientLayer {
+            gradient.frame = desktopView.bounds
         }
+        webView.frame = view.bounds
+        if cursorView.center == .zero {
+            cursorView.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        }
+        view.bringSubviewToFront(dockView)
+        view.bringSubviewToFront(cursorView)
+
+        // Wait until monitor has real 16:9 bounds before loading so YouTube streams crisp 1080p!
+        if !didInitialLoad && view.bounds.width > 200 {
+            didInitialLoad = true
+            let saved = UserDefaults.standard.string(forKey: lastURLKey) ?? ""
+            if saved.hasPrefix("http") {
+                if saved.contains("google.com") {
+                    launchChrome(urlString: saved)
+                } else {
+                    openSingleApp(saved)
+                }
+            } else {
+                showDesktop()
+            }
+        }
+    }
+
+    @objc private func pauseAllMediaOnBackground() {
+        let js = "document.querySelectorAll('video,audio').forEach(function(m){m.pause();});"
+        webView?.evaluateJavaScript(js, completionHandler: nil)
     }
 
     private func setupDesktopWallpaper() {
@@ -89,7 +110,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         view.addSubview(desktopView)
     }
 
-    private func makeConfiguredWebView() -> WKWebView {
+    private func setupSingleWebView() {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -113,21 +134,17 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         )
         config.userContentController.addUserScript(userScript)
 
-        let frame = view.bounds.width > 100 ? view.bounds : CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        let wv = WKWebView(frame: frame, configuration: config)
-        wv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        wv.navigationDelegate = self
-        wv.scrollView.contentInsetAdjustmentBehavior = .never
-        wv.scrollView.minimumZoomScale = 0.5
-        wv.scrollView.maximumZoomScale = 3.0
-        wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
-        return wv
-    }
+        webView = WKWebView(frame: view.bounds, configuration: config)
+        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        webView.navigationDelegate = self
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.minimumZoomScale = 0.5
+        webView.scrollView.maximumZoomScale = 3.0
+        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
+        webView.isHidden = true
+        view.addSubview(webView)
 
-    private func observeActiveProgress() {
-        progressObs?.invalidate()
-        guard let wv = activeWebView else { return }
-        progressObs = wv.observe(\.estimatedProgress, options: [.new]) { [weak self] _, _ in
+        progressObs = webView.observe(\.estimatedProgress, options: [.new]) { [weak self] _, _ in
             DispatchQueue.main.async { self?.onStateChanged?() }
         }
     }
@@ -137,10 +154,17 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        if webView === activeWebView, let current = webView.url?.absoluteString, current.hasPrefix("http") {
+        if let current = webView.url?.absoluteString, current.hasPrefix("http") {
             UserDefaults.standard.set(current, forKey: lastURLKey)
+            if isChromeMode && chromeTabURLs.indices.contains(activeChromeTab) {
+                chromeTabURLs[activeChromeTab] = current
+            }
         }
         onStateChanged?()
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        webView.reload()
     }
 
     private func setupFloatingDock() {
@@ -220,39 +244,17 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         cursorView.layer.shadowOpacity = 0.6
         cursorView.layer.shadowRadius = 4
         cursorView.layer.shadowOffset = CGSize(width: 0, height: 2)
-        cursorView.isUserInteractionEnabled = false
-        view.addSubview(cursorView)
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        if let gradient = desktopView.layer.sublayers?.first as? CAGradientLayer {
-            gradient.frame = desktopView.bounds
-        }
-        mainWebView?.frame = view.bounds
-        for wv in chromeTabs { wv.frame = view.bounds }
-        if cursorView.center == .zero {
-            cursorView.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
-        }
-        view.bringSubviewToFront(dockView)
-        view.bringSubviewToFront(cursorView)
-    }
-
-    private func hideAllWebViews() {
-        mainWebView.isHidden = true
-        for wv in chromeTabs { wv.isHidden = true }
-    }
-
-    @objc func showDesktop() {
-        isChromeMode = false
-        isVideoZoomedFull = false
-        hideAllWebViews()
-        desktopView.isHidden = false
-        dockView.isHidden = false
-        UserDefaults.standard.removeObject(forKey: lastURLKey)
-view.bringSubviewToFront(desktopView)
-view.bringSubviewToFront(dockView)
-view.bringSubviewToFront(cursorView)
+cursorView.isUserInteractionEnabled = false
+view.addSubview(cursorView)
+}
+@objc func showDesktop() {
+pauseAllMediaOnBackground()
+isChromeMode = false
+isVideoZoomedFull = false
+webView.isHidden = true
+desktopView.isHidden = false
+dockView.isHidden = false
+UserDefaults.standard.removeObject(forKey: lastURLKey)
 onStateChanged?()
 }
 @objc func launchYouTube() { openSingleApp("youtube.com") }
@@ -263,17 +265,12 @@ isChromeMode = false
 isVideoZoomedFull = false
 desktopView.isHidden = true
 dockView.isHidden = true
-hideAllWebViews()
-mainWebView.frame = view.bounds
-mainWebView.isHidden = false
-view.bringSubviewToFront(mainWebView)
-view.bringSubviewToFront(dockView)
-view.bringSubviewToFront(cursorView)
+webView.frame = view.bounds
+webView.isHidden = false
 UserDefaults.standard.set(urlString, forKey: lastURLKey)
 if let url = URL(string: urlString) {
-mainWebView.load(URLRequest(url: url))
+webView.load(URLRequest(url: url))
 }
-observeActiveProgress()
 onStateChanged?()
 }
 func launchChrome(urlString: String = "google.com") {
@@ -281,63 +278,44 @@ isChromeMode = true
 isVideoZoomedFull = false
 desktopView.isHidden = true
 dockView.isHidden = true
-hideAllWebViews()
-if chromeTabs.isEmpty {
-addChromeTab(urlString: urlString)
+webView.frame = view.bounds
+webView.isHidden = false
+if chromeTabURLs.isEmpty {
+chromeTabURLs = [urlString]
+activeChromeTab = 0
 } else {
-switchChromeTab(index: activeChromeTab)
-if let url = URL(string: urlString) {
-activeWebView?.load(URLRequest(url: url))
+chromeTabURLs[activeChromeTab] = urlString
 }
+UserDefaults.standard.set(urlString, forKey: lastURLKey)
+if let url = URL(string: urlString) {
+webView.load(URLRequest(url: url))
 }
 onStateChanged?()
 }
 func addChromeTab(urlString: String = "google.com") {
 isChromeMode = true
-desktopView.isHidden = true
-dockView.isHidden = true
-let wv = makeConfiguredWebView()
-wv.frame = view.bounds
-view.insertSubview(wv, belowSubview: dockView)
-chromeTabs.append(wv)
-switchChromeTab(index: chromeTabs.count - 1)
-if let url = URL(string: urlString) {
-wv.load(URLRequest(url: url))
-}
-onStateChanged?()
+chromeTabURLs.append(urlString)
+activeChromeTab = chromeTabURLs.count - 1
+launchChrome(urlString: urlString)
 }
 func switchChromeTab(index: Int) {
-guard chromeTabs.indices.contains(index) else { return }
-isChromeMode = true
-desktopView.isHidden = true
-dockView.isHidden = true
+guard chromeTabURLs.indices.contains(index) else { return }
 activeChromeTab = index
-hideAllWebViews()
-let active = chromeTabs[index]
-active.frame = view.bounds
-active.isHidden = false
-view.bringSubviewToFront(active)
-view.bringSubviewToFront(dockView)
-view.bringSubviewToFront(cursorView)
-observeActiveProgress()
-onStateChanged?()
+launchChrome(urlString: chromeTabURLs[index])
 }
 func closeChromeTab(index: Int) {
-guard chromeTabs.indices.contains(index) else { return }
-let removed = chromeTabs.remove(at: index)
-removed.stopLoading()
-removed.removeFromSuperview()
-if chromeTabs.isEmpty {
-addChromeTab(urlString: "google.com")
+guard chromeTabURLs.indices.contains(index) else { return }
+chromeTabURLs.remove(at: index)
+if chromeTabURLs.isEmpty {
+chromeTabURLs = ["google.com"]
+activeChromeTab = 0
 } else {
-switchChromeTab(index: min(index, chromeTabs.count - 1))
+activeChromeTab = min(index, chromeTabURLs.count - 1)
 }
-onStateChanged?()
+launchChrome(urlString: chromeTabURLs[activeChromeTab])
 }
 func toggleDock() {
 dockView.isHidden.toggle()
-view.bringSubviewToFront(dockView)
-view.bringSubviewToFront(cursorView)
 }
 func moveCursor(dx: CGFloat, dy: CGFloat) {
 let newX = min(max(0, cursorView.center.x + dx), view.bounds.width)
@@ -362,7 +340,7 @@ return
 }
 }
 }
-guard let webView = activeWebView, !webView.isHidden else { return }
+guard !webView.isHidden else { return }
 let scale = max(0.1, webView.scrollView.zoomScale)
 let px = String(Double(point.x / scale))
 let py = String(Double(point.y / scale))
@@ -416,11 +394,11 @@ let t12 = "inp.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Ent
 let t13 = "inp.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
 let t14 = "var f=inp.closest('form');if(f){f.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));f.submit();}"
 let t15 = "}})();"
-activeWebView?.evaluateJavaScript(t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t12 + t13 + t14 + t15, completionHandler: nil)
+webView.evaluateJavaScript(t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t12 + t13 + t14 + t15, completionHandler: nil)
 }
 func hasFocusedInput(completion: @escaping (Bool) -> Void) {
 let js = "Boolean(window.__lastFocusedInput)"
-activeWebView?.evaluateJavaScript(js) { res, _ in
+webView.evaluateJavaScript(js) { res, _ in
 completion((res as? Bool) ?? false)
 }
 }
@@ -429,14 +407,14 @@ let sec = String(seconds)
 let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
 let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
 let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}})();"
-activeWebView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
+webView.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
 }
 func seekVideo(fraction: Double) {
 let frac = String(fraction)
 let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
 let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
 let k3 = "if(v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*" + frac + ";}})();"
-activeWebView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
+webView.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
 }
 func toggleFullscreen() {
 isVideoZoomedFull.toggle()
@@ -447,7 +425,7 @@ let f3 = "if(!style){style=document.createElement('style');style.id='custom-fs-s
 let f4 = "style.textContent='body{overflow:hidden!important;}#movie_player,.html5-video-player{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:999999!important;background:#000!important;}#movie_player video,.html5-main-video{width:100vw!important;height:100vh!important;left:0!important;top:0!important;object-fit:contain!important;}ytd-masthead,#secondary,#below,#guide{display:none!important;}';"
 let f5 = "document.head.appendChild(style);}"
 let f6 = "}else{if(style){style.remove();}}window.dispatchEvent(new Event('resize'));})();"
-activeWebView?.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6, completionHandler: nil)
+webView.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6, completionHandler: nil)
 }
 }
 class ViewController: UIViewController {
@@ -580,7 +558,7 @@ self?.updateUIState()
 private func updateUIState() {
 guard let ext = externalVC else { return }
 let w = view.bounds.width
-if let wv = ext.activeWebView, wv.isLoading {
+if let wv = ext.webView, wv.isLoading {
 loadingBar.isHidden = false
 loadingBar.setProgress(Float(max(0.15, wv.estimatedProgress)), animated: true)
 reloadBtn.setTitle("✕", for: .normal)
@@ -608,15 +586,13 @@ addBtn.frame = CGRect(x: x, y: 2, width: 54, height: 28)
 addBtn.addTarget(self, action: #selector(addNewChromeTab), for: .touchUpInside)
 chromeTabScroll.addSubview(addBtn)
 x += 60
-let count = externalVC?.chromeTabs.count ?? 0
+let urls = externalVC?.chromeTabURLs ?? []
 let activeIdx = externalVC?.activeChromeTab ?? 0
-for i in 0..<count {
+for (i, raw) in urls.enumerated() {
 let isSelected = (i == activeIdx)
-let wv = externalVC?.chromeTabs[i]
-let host = wv?.url?.host?.replacingOccurrences(of: "www.", with: "") ?? "Google"
-let labelText = host.isEmpty ? "Google" : host
+let host = URL(string: raw)?.host?.replacingOccurrences(of: "www.", with: "") ?? "Tab (i + 1)"
 let tabBtn = UIButton(type: .system)
-tabBtn.setTitle("  (labelText)", for: .normal)
+tabBtn.setTitle("  (host)", for: .normal)
 tabBtn.contentHorizontalAlignment = .left
 tabBtn.titleLabel?.font = .systemFont(ofSize: 11.5, weight: isSelected ? .bold : .regular)
 tabBtn.backgroundColor = isSelected ? .systemBlue.withAlphaComponent(0.25) : .secondarySystemBackground
@@ -663,10 +639,10 @@ UIApplication.shared.connectedScenes
 .windows.first?.rootViewController as? ExternalBrowserViewController
 }
 @objc private func goHome() { externalVC?.showDesktop() }
-@objc private func goBack() { externalVC?.activeWebView?.goBack() }
-@objc private func goForward() { externalVC?.activeWebView?.goForward() }
+@objc private func goBack() { externalVC?.webView?.goBack() }
+@objc private func goForward() { externalVC?.webView?.goForward() }
 @objc private func reloadOrStop() {
-guard let wv = externalVC?.activeWebView else { return }
+guard let wv = externalVC?.webView else { return }
 if wv.isLoading {
 wv.stopLoading()
 } else {
@@ -694,7 +670,7 @@ externalVC?.closeChromeTab(index: sender.tag)
 let p1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
 let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids;"
 let p3 = "if(v){v.paused?v.play():v.pause();}})();"
-externalVC?.activeWebView?.evaluateJavaScript(p1 + p2 + p3, completionHandler: nil)
+externalVC?.webView?.evaluateJavaScript(p1 + p2 + p3, completionHandler: nil)
 }
 @objc private func liveTextChanged() {
 let text = urlField.text ?? ""
@@ -746,7 +722,7 @@ private func startVideoProgressTimer() {
 progressTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
 guard let self = self else { return }
 self.bindExternalCallbacks()
-guard !self.isScrubbing, let webView = self.externalVC?.activeWebView, !webView.isHidden else { return }
+guard !self.isScrubbing, let webView = self.externalVC?.webView, !webView.isHidden else { return }
 let t1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
 let t2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
 let t3 = "if(!v||!isFinite(v.duration)||v.duration<=0)return null;return [v.currentTime,v.duration];})();"
@@ -770,14 +746,14 @@ gesture.setTranslation(.zero, in: trackpadView)
 ext.moveCursor(dx: delta.x * 2.2, dy: delta.y * 2.2)
 }
 @objc private func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
-guard let webView = externalVC?.activeWebView else { return }
+guard let webView = externalVC?.webView else { return }
 let delta = gesture.translation(in: trackpadView)
 gesture.setTranslation(.zero, in: trackpadView)
 let newY = max(0, webView.scrollView.contentOffset.y - delta.y * 2.0)
 webView.scrollView.setContentOffset(CGPoint(x: 0, y: newY), animated: false)
 }
 @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-guard let scrollView = externalVC?.activeWebView?.scrollView else { return }
+guard let scrollView = externalVC?.webView?.scrollView else { return }
 if gesture.state == .changed {
 let newScale = min(max(scrollView.minimumZoomScale, scrollView.zoomScale * gesture.scale), scrollView.maximumZoomScale)
 scrollView.setZoomScale(newScale, animated: false)
