@@ -10,6 +10,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
     )
     private let lastURLKey = "SavedLastVisitedURL"
     private var isVideoZoomedFull = false
+    var onInputSelected: ((String) -> Void)?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -76,7 +77,6 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         config.mediaTypesRequiringUserActionForPlayback = [.all]
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
 
-        // Prevent iOS native video player from hijacking full screen + skip ads
         let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen = function(){};"
         let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen = function(){};"
         let s3 = "setInterval(function(){"
@@ -259,64 +259,80 @@ return
 }
 }
 guard !webView.isHidden else { return }
-let rx = String(Double(point.x / max(1, view.bounds.width)))
-let ry = String(Double(point.y / max(1, view.bounds.height)))
-let c1 = "(function(){var x=window.innerWidth*" + rx + ";var y=window.innerHeight*" + ry + ";"
-let c2 = "var el=document.elementFromPoint(x,y);if(!el)return;"
-let c3 = "var t=el.closest('a,button,[role=button],input,textarea,select,label,yt-formatted-string,ytd-thumbnail')||el;"
-let c4 = "window.__lastFocusedInput=(t.tagName==='INPUT'||t.tagName==='TEXTAREA')?t:t.querySelector('input,textarea');"
-let c5 = "if(window.__lastFocusedInput){window.__lastFocusedInput.focus();window.__lastFocusedInput.click();}else{t.focus();}"
-let c6 = "var o={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y};"
-let c7 = "['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(k){t.dispatchEvent(new MouseEvent(k,o));});"
-let c8 = "if(typeof t.click==='function'){t.click();}"
-let c9 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0){window.location.href=t.href;}"
-let c10 = "})();"
-webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10, completionHandler: nil)
+// Exact 1:1 coordinate mapping (fixes vertical click offset on Google/Netflix)
+let scale = max(0.1, webView.scrollView.zoomScale)
+let px = String(Double(point.x / scale))
+let py = String(Double(point.y / scale))
+let c1 = "(function(){var x=" + px + ";var y=" + py + ";"
+let c2 = "var el=document.elementFromPoint(x,y);if(!el)return null;"
+let c3 = "var inp=(el.tagName==='INPUT'||el.tagName==='TEXTAREA')?el:el.closest('input,textarea');"
+let c4 = "if(!inp){var box=el.closest('form,[role=search],[role=combobox],label');if(box){inp=box.querySelector('input:not([type=hidden]),textarea');}}"
+let c5 = "if(inp){window.__lastFocusedInput=inp;inp.focus();inp.click();return {isInput:true,val:(inp.value||'')};}"
+let c6 = "window.__lastFocusedInput=null;"
+let c7 = "var t=el.closest('a,button,[role=button],[role=tab],[role=link],select,label,yt-formatted-string,ytd-thumbnail')||el;"
+let c8 = "t.focus();var o={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y};"
+let c9 = "['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(k){t.dispatchEvent(new MouseEvent(k,o));});"
+let c10 = "if(typeof t.click==='function'){t.click();}"
+let c11 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0){window.location.href=t.href;}"
+let c12 = "return {isInput:false,val:''};})();"
+webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12) { [weak self] res, _ in
+guard let dict = res as? [String: Any], let isInput = dict["isInput"] as? Bool, isInput else { return }
+let existingText = (dict["val"] as? String) ?? ""
+self?.onInputSelected?(existingText)
+}
 }
 func typeTextIntoFocusedInput(_ text: String, submit: Bool) {
 let base64 = Data(text.utf8).base64EncodedString()
 let submitFlag = submit ? "true" : "false"
 let t1 = "(function(){var bin=atob('" + base64 + "');var b=new Uint8Array(bin.length);"
 let t2 = "for(var i=0;i<bin.length;i++){b[i]=bin.charCodeAt(i);}"
-let t3 = "var val=new TextDecoder().decode(b);var inp=document.activeElement;"
+let t3 = "var val=new TextDecoder().decode(b);var inp=window.__lastFocusedInput||document.activeElement;"
 let t4 = "if(!inp||(inp.tagName!=='INPUT'&&inp.tagName!=='TEXTAREA')){"
-let t5 = "inp=window.__lastFocusedInput||document.querySelector('input[type=search],input[name=search_query],input[name=q],input[type=email],input[type=text],input:not([type=hidden])');}"
-let t6 = "if(!inp)return;inp.focus();"
+let t5 = "inp=document.querySelector('input[type=search],input[name=search_query],input[name=q],input[type=email],input[type=text],textarea');}"
+let t6 = "if(!inp)return;window.__lastFocusedInput=inp;inp.focus();"
 let t7 = "var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');"
 let t8 = "var ts=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value');"
 let t9 = "if(inp.tagName==='TEXTAREA'&&ts&&ts.set){ts.set.call(inp,val);}else if(s&&s.set){s.set.call(inp,val);}else{inp.value=val;}"
 let t10 = "inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}));"
-let t11 = "if(" + submitFlag + "){var f=inp.closest('form');if(f){f.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));f.submit();}"
-let t12 = "else{inp.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
-let t13 = "inp.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));}}})();"
-webView.evaluateJavaScript(t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t12 + t13, completionHandler: nil)
+let t11 = "if(" + submitFlag + "){"
+let t12 = "inp.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
+let t13 = "inp.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
+let t14 = "inp.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
+let t15 = "var f=inp.closest('form');if(f){f.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));f.submit();}"
+let t16 = "}})();"
+webView.evaluateJavaScript(t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t12 + t13 + t14 + t15 + t16, completionHandler: nil)
+}
+func hasFocusedInput(completion: @escaping (Bool) -> Void) {
+let js = "Boolean(window.__lastFocusedInput || (document.activeElement && (document.activeElement.tagName==='INPUT' || document.activeElement.tagName==='TEXTAREA')))"
+webView.evaluateJavaScript(js) { res, _ in
+completion((res as? Bool) ?? false)
+}
 }
 func skipVideo(seconds: Double) {
 let sec = String(seconds)
 let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
 let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}})();"
 webView.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
 }
 func seekVideo(fraction: Double) {
 let frac = String(fraction)
 let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
 let k3 = "if(v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*" + frac + ";}})();"
 webView.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
 }
 func toggleFullscreen() {
 isVideoZoomedFull.toggle()
 let fullFlag = isVideoZoomedFull ? "true" : "false"
+// Clean CSS viewport full-screen (avoids WebKit's "browser does not support full screen" error)
 let f1 = "(function(){var style=document.getElementById('custom-fs-style');"
 let f2 = "if(" + fullFlag + "){"
-let f3 = "var b=document.querySelector('.ytp-fullscreen-button');if(b&&!document.fullscreenElement){b.click();}"
-let f4 = "if(!style){style=document.createElement('style');style.id='custom-fs-style';"
-let f5 = "style.textContent='#movie_player{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:99999!important;background:#000!important;}ytd-masthead,#secondary,#below{display:none!important;}';"
-let f6 = "document.head.appendChild(style);}"
-let f7 = "}else{if(style){style.remove();}if(document.fullscreenElement){document.exitFullscreen();}}"
-let f8 = "})();"
-webView.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8, completionHandler: nil)
+let f3 = "if(!style){style=document.createElement('style');style.id='custom-fs-style';"
+let f4 = "style.textContent='body{overflow:hidden!important;}#movie_player,.html5-video-player{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:999999!important;background:#000!important;}#movie_player video,.html5-main-video{width:100vw!important;height:100vh!important;left:0!important;top:0!important;object-fit:contain!important;}ytd-masthead,#secondary,#below,#guide{display:none!important;}';"
+let f5 = "document.head.appendChild(style);}"
+let f6 = "}else{if(style){style.remove();}}window.dispatchEvent(new Event('resize'));})();"
+webView.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6, completionHandler: nil)
 }
 }
 class ViewController: UIViewController {
@@ -339,6 +355,7 @@ urlField.returnKeyType = .go
 urlField.clearButtonMode = .whileEditing
 urlField.autocapitalizationType = .none
 urlField.autocorrectionType = .no
+urlField.addTarget(self, action: #selector(liveTextChanged), for: .editingChanged)
 urlField.addTarget(self, action: #selector(handleTextSubmit), for: .editingDidEndOnExit)
 urlField.frame = CGRect(x: 140, y: 54, width: w - 152, height: 38)
 view.addSubview(urlField)
@@ -414,6 +431,15 @@ trackpadView.addGestureRecognizer(doubleTap)
 trackpadView.addGestureRecognizer(singleTap)
 startVideoProgressTimer()
 }
+private func bindExternalCallbacks() {
+guard let ext = externalVC, ext.onInputSelected == nil else { return }
+ext.onInputSelected = { [weak self] existingText in
+DispatchQueue.main.async {
+self?.urlField.text = existingText
+self?.urlField.becomeFirstResponder()
+}
+}
+}
 private func makeNavButton(title: String, frame: CGRect, action: Selector) -> UIButton {
 let btn = UIButton(type: .system)
 btn.setTitle(title, for: .normal)
@@ -443,32 +469,37 @@ UIApplication.shared.connectedScenes
 @objc private func goHome() { externalVC?.showDesktop() }
 @objc private func goBack() { externalVC?.webView.goBack() }
 @objc private func goForward() { externalVC?.webView.goForward() }
-@objc private func openYouTube() { externalVC?.launchYouTube() }
-@objc private func openChrome() { externalVC?.launchChrome() }
+@objc private func openYouTube() { urlField.text = ""; externalVC?.launchYouTube() }
+@objc private func openChrome() { urlField.text = ""; externalVC?.launchChrome() }
 @objc private func toggleDock() { externalVC?.toggleDock() }
 @objc private func rewind15() { externalVC?.skipVideo(seconds: -15) }
 @objc private func forward15() { externalVC?.skipVideo(seconds: 15) }
 @objc private func toggleFullscreen() { externalVC?.toggleFullscreen() }
 @objc private func togglePlayPause() {
 let p1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids[0];"
+let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids;"
 let p3 = "if(v){v.paused?v.play():v.pause();}})();"
 externalVC?.webView.evaluateJavaScript(p1 + p2 + p3, completionHandler: nil)
 }
+@objc private func liveTextChanged() {
+let text = urlField.text ?? ""
+externalVC?.hasFocusedInput { [weak self] focused in
+if focused {
+self?.externalVC?.typeTextIntoFocusedInput(text, submit: false)
+}
+}
+}
 @objc private func sendTextToPageBox() {
-guard let text = urlField.text, !text.isEmpty else { return }
+let text = urlField.text ?? ""
 externalVC?.typeTextIntoFocusedInput(text, submit: true)
-urlField.text = ""
 urlField.resignFirstResponder()
 }
 @objc private func handleTextSubmit() {
 guard let text = urlField.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return }
-let checkFocusJS = "Boolean(document.activeElement&&(document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA'))"
-externalVC?.webView.evaluateJavaScript(checkFocusJS) { [weak self] result, _ in
+externalVC?.hasFocusedInput { [weak self] isFocused in
 guard let self = self else { return }
-if let isFocused = result as? Bool, isFocused {
+if isFocused {
 self.externalVC?.typeTextIntoFocusedInput(text, submit: true)
-self.urlField.text = ""
 } else {
 let target: String
 if text.hasPrefix("http://") || text.hasPrefix("https://") {
@@ -494,9 +525,11 @@ isScrubbing = false
 }
 private func startVideoProgressTimer() {
 progressTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-guard let self = self, !self.isScrubbing, let webView = self.externalVC?.webView, !webView.isHidden else { return }
+guard let self = self else { return }
+self.bindExternalCallbacks()
+guard !self.isScrubbing, let webView = self.externalVC?.webView, !webView.isHidden else { return }
 let t1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-let t2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+let t2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
 let t3 = "if(!v||!isFinite(v.duration)||v.duration<=0)return null;return [v.currentTime,v.duration];})();"
 webView.evaluateJavaScript(t1 + t2 + t3) { result, _ in
 guard let arr = result as? [Double], let cur = arr.first, let dur = arr.last, dur > 0 else { return }
@@ -533,6 +566,7 @@ gesture.scale = 1.0
 }
 }
 @objc private func handleSingleTap() {
+bindExternalCallbacks()
 externalVC?.clickAtCursor()
 }
 @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
