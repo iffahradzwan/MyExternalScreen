@@ -1,12 +1,17 @@
 import UIKit
 import WebKit
 
-class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
-    var tabs: [WKWebView] = []
-    var activeTabIndex: Int = 0
+class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
+    var mainWebView: WKWebView!
+    var chromeTabs: [WKWebView] = []
+    var activeChromeTab: Int = 0
+    var isChromeMode: Bool = false
+
     var activeWebView: WKWebView? {
-        guard tabs.indices.contains(activeTabIndex) else { return nil }
-        return tabs[activeTabIndex]
+        if isChromeMode {
+            return chromeTabs.indices.contains(activeChromeTab) ? chromeTabs[activeChromeTab] : nil
+        }
+        return mainWebView
     }
 
     let cursorView = UIView()
@@ -17,7 +22,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
     private let lastURLKey = "SavedLastVisitedURL"
     private var isVideoZoomedFull = false
     var onInputSelected: ((String) -> Void)?
-    var onTabsOrLoadChanged: (() -> Void)?
+    var onStateChanged: (() -> Void)?
     private var progressObs: NSKeyValueObservation?
 
     override func viewDidLoad() {
@@ -25,14 +30,21 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
         view.backgroundColor = .black
 
         setupDesktopWallpaper()
+        mainWebView = makeConfiguredWebView()
+        mainWebView.isHidden = true
+        view.addSubview(mainWebView)
+
         setupFloatingDock()
         setupCursor()
 
         let saved = UserDefaults.standard.string(forKey: lastURLKey) ?? ""
         if !saved.isEmpty {
-            openURL(saved, newTab: true)
+            if saved.contains("google.com") {
+                launchChrome(urlString: saved)
+            } else {
+                openSingleApp(saved)
+            }
         } else {
-            _ = createTab(urlString: nil)
             showDesktop()
         }
     }
@@ -77,13 +89,11 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
         view.addSubview(desktopView)
     }
 
-    @discardableResult
-    func createTab(urlString: String?) -> WKWebView {
+    private func makeConfiguredWebView() -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.allowsPictureInPictureMediaPlayback = false
-        // Empty array allows YouTube video stream to play on external monitor!
         config.mediaTypesRequiringUserActionForPlayback = []
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
 
@@ -106,78 +116,34 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
         )
         config.userContentController.addUserScript(userScript)
 
-        let wv = WKWebView(frame: view.bounds, configuration: config)
+        let frame = view.bounds.width > 100 ? view.bounds : CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let wv = WKWebView(frame: frame, configuration: config)
         wv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         wv.navigationDelegate = self
-        wv.uiDelegate = self
-        // Fix vertical click offset by disabling safe-area top shift!
         wv.scrollView.contentInsetAdjustmentBehavior = .never
         wv.scrollView.minimumZoomScale = 0.5
         wv.scrollView.maximumZoomScale = 3.0
         wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
-
-        tabs.append(wv)
-        view.insertSubview(wv, belowSubview: dockView)
-        switchToTab(index: tabs.count - 1)
-
-        if let str = urlString, let url = URL(string: str) {
-            desktopView.isHidden = true
-            wv.isHidden = false
-            dockView.isHidden = true
-            wv.load(URLRequest(url: url))
-        }
         return wv
-    }
-
-    func switchToTab(index: Int) {
-        guard tabs.indices.contains(index) else { return }
-        activeTabIndex = index
-        for (i, wv) in tabs.enumerated() {
-            wv.isHidden = (i != index) || !desktopView.isHidden
-        }
-        observeActiveProgress()
-        onTabsOrLoadChanged?()
-    }
-
-    func closeTab(index: Int) {
-        guard tabs.indices.contains(index) else { return }
-        let removed = tabs.remove(at: index)
-        removed.stopLoading()
-        removed.removeFromSuperview()
-        if tabs.isEmpty {
-            _ = createTab(urlString: nil)
-            showDesktop()
-        } else {
-            let nextIdx = min(index, tabs.count - 1)
-            switchToTab(index: nextIdx)
-        }
-        onTabsOrLoadChanged?()
     }
 
     private func observeActiveProgress() {
         progressObs?.invalidate()
         guard let wv = activeWebView else { return }
         progressObs = wv.observe(\.estimatedProgress, options: [.new]) { [weak self] _, _ in
-            DispatchQueue.main.async { self?.onTabsOrLoadChanged?() }
+            DispatchQueue.main.async { self?.onStateChanged?() }
         }
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        onTabsOrLoadChanged?()
+        onStateChanged?()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView === activeWebView, let current = webView.url?.absoluteString, !current.isEmpty {
             UserDefaults.standard.set(current, forKey: lastURLKey)
         }
-        onTabsOrLoadChanged?()
-    }
-
-    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = navigationAction.request.url {
-            openURL(url.absoluteString, newTab: true)
-        }
-        return nil
+        onStateChanged?()
     }
 
     private func setupFloatingDock() {
@@ -201,7 +167,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
         let apps: [(String, String, UIColor, Selector)] = [
             ("Desktop", "macwindow", .systemIndigo, #selector(showDesktop)),
             ("YouTube", "play.rectangle.fill", .systemRed, #selector(launchYouTube)),
-            ("Chrome", "globe", .systemBlue, #selector(launchChrome)),
+            ("Chrome", "globe", .systemBlue, #selector(launchChromeDefault)),
             ("Netflix", "film.fill", .systemOrange, #selector(launchNetflix))
         ]
 
@@ -249,51 +215,117 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
 
     private func setupCursor() {
         cursorView.frame = CGRect(x: 0, y: 0, width: 22, height: 22)
-cursorView.backgroundColor = UIColor.systemRed.withAlphaComponent(0.9)
-cursorView.layer.cornerRadius = 11
-cursorView.layer.borderWidth = 2.5
-cursorView.layer.borderColor = UIColor.white.cgColor
-cursorView.layer.shadowColor = UIColor.black.cgColor
-cursorView.layer.shadowOpacity = 0.6
-cursorView.layer.shadowRadius = 4
-cursorView.layer.shadowOffset = CGSize(width: 0, height: 2)
-cursorView.isUserInteractionEnabled = false
-view.addSubview(cursorView)
-}
-override func viewDidLayoutSubviews() {
-super.viewDidLayoutSubviews()
-if let gradient = desktopView.layer.sublayers?.first as? CAGradientLayer {
-gradient.frame = desktopView.bounds
-}
-if cursorView.center == .zero {
-cursorView.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
-}
-view.bringSubviewToFront(dockView)
-view.bringSubviewToFront(cursorView)
-}
-@objc func showDesktop() {
+        cursorView.backgroundColor = UIColor.systemRed.withAlphaComponent(0.9)
+        cursorView.layer.cornerRadius = 11
+        cursorView.layer.borderWidth = 2.5
+        cursorView.layer.borderColor = UIColor.white.cgColor
+        cursorView.layer.shadowColor = UIColor.black.cgColor
+        cursorView.layer.shadowOpacity = 0.6
+        cursorView.layer.shadowRadius = 4
+        cursorView.layer.shadowOffset = CGSize(width: 0, height: 2)
+        cursorView.isUserInteractionEnabled = false
+        view.addSubview(cursorView)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if let gradient = desktopView.layer.sublayers?.first as? CAGradientLayer {
+            gradient.frame = desktopView.bounds
+        }
+        mainWebView?.frame = view.bounds
+        for wv in chromeTabs { wv.frame = view.bounds }
+        if cursorView.center == .zero {
+            cursorView.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        }
+        view.bringSubviewToFront(dockView)
+        view.bringSubviewToFront(cursorView)
+    }
+
+    private func hideAllWebViews() {
+        mainWebView.isHidden = true
+        for wv in chromeTabs { wv.isHidden = true }
+    }
+
+    @objc func showDesktop() {
+        isChromeMode = false
+        isVideoZoomedFull = false
+hideAllWebViews()
 desktopView.isHidden = false
-for wv in tabs { wv.isHidden = true }
 dockView.isHidden = false
-isVideoZoomedFull = false
 UserDefaults.standard.removeObject(forKey: lastURLKey)
-onTabsOrLoadChanged?()
+onStateChanged?()
 }
-@objc func launchYouTube() { openURL("youtube.com", newTab: false) }
-@objc func launchChrome() { openURL("google.com", newTab: false) }
-@objc func launchNetflix() { openURL("netflix.com", newTab: false) }
-func openURL(_ urlString: String, newTab: Bool = false) {
+@objc func launchYouTube() { openSingleApp("youtube.com") }
+@objc func launchNetflix() { openSingleApp("netflix.com") }
+@objc func launchChromeDefault() { launchChrome(urlString: "google.com") }
+func openSingleApp(_ urlString: String) {
+isChromeMode = false
+isVideoZoomedFull = false
 desktopView.isHidden = true
 dockView.isHidden = true
-isVideoZoomedFull = false
+hideAllWebViews()
+mainWebView.frame = view.bounds
+mainWebView.isHidden = false
 UserDefaults.standard.set(urlString, forKey: lastURLKey)
-if newTab || tabs.isEmpty {
-_ = createTab(urlString: urlString)
-} else if let wv = activeWebView, let url = URL(string: urlString) {
-wv.isHidden = false
+if let url = URL(string: urlString) {
+mainWebView.load(URLRequest(url: url))
+}
+observeActiveProgress()
+onStateChanged?()
+}
+func launchChrome(urlString: String = "google.com") {
+isChromeMode = true
+isVideoZoomedFull = false
+desktopView.isHidden = true
+dockView.isHidden = true
+hideAllWebViews()
+if chromeTabs.isEmpty {
+addChromeTab(urlString: urlString)
+} else {
+switchChromeTab(index: activeChromeTab)
+if let url = URL(string: urlString) {
+activeWebView?.load(URLRequest(url: url))
+}
+}
+onStateChanged?()
+}
+func addChromeTab(urlString: String = "google.com") {
+isChromeMode = true
+desktopView.isHidden = true
+dockView.isHidden = true
+let wv = makeConfiguredWebView()
+wv.frame = view.bounds
+view.insertSubview(wv, belowSubview: dockView)
+chromeTabs.append(wv)
+switchChromeTab(index: chromeTabs.count - 1)
+if let url = URL(string: urlString) {
 wv.load(URLRequest(url: url))
 }
-onTabsOrLoadChanged?()
+onStateChanged?()
+}
+func switchChromeTab(index: Int) {
+guard chromeTabs.indices.contains(index) else { return }
+isChromeMode = true
+desktopView.isHidden = true
+dockView.isHidden = true
+activeChromeTab = index
+hideAllWebViews()
+chromeTabs[index].frame = view.bounds
+chromeTabs[index].isHidden = false
+observeActiveProgress()
+onStateChanged?()
+}
+func closeChromeTab(index: Int) {
+guard chromeTabs.indices.contains(index) else { return }
+let removed = chromeTabs.remove(at: index)
+removed.stopLoading()
+removed.removeFromSuperview()
+if chromeTabs.isEmpty {
+addChromeTab(urlString: "google.com")
+} else {
+switchChromeTab(index: min(index, chromeTabs.count - 1))
+}
+onStateChanged?()
 }
 func toggleDock() {
 dockView.isHidden.toggle()
@@ -413,7 +445,7 @@ class ViewController: UIViewController {
 private let urlField = UITextField()
 private let reloadBtn = UIButton(type: .system)
 private let loadingBar = UIProgressView(progressViewStyle: .bar)
-private let tabScroll = UIScrollView()
+private let chromeTabScroll = UIScrollView()
 private let videoSlider = UISlider()
 private let timeLabel = UILabel()
 private let trackpadView = UIView()
@@ -423,7 +455,7 @@ override func viewDidLoad() {
 super.viewDidLoad()
 view.backgroundColor = .systemBackground
 let w = view.bounds.width
-// Row 1: Home, Back, Forward, Reload/Stop, URL/Input Bar
+// Row 1: Navigation + Reload/Stop + URL/Input Bar
 view.addSubview(makeNavButton(title: "⌂", frame: CGRect(x: 10, y: 52, width: 34, height: 36), action: #selector(goHome)))
 view.addSubview(makeNavButton(title: "←", frame: CGRect(x: 48, y: 52, width: 34, height: 36), action: #selector(goBack)))
 view.addSubview(makeNavButton(title: "→", frame: CGRect(x: 86, y: 52, width: 34, height: 36), action: #selector(goForward)))
@@ -444,66 +476,67 @@ urlField.addTarget(self, action: #selector(liveTextChanged), for: .editingChange
 urlField.addTarget(self, action: #selector(handleTextSubmit), for: .editingDidEndOnExit)
 urlField.frame = CGRect(x: 162, y: 52, width: w - 172, height: 36)
 view.addSubview(urlField)
-// Loading progress bar right under URL bar
+// Loading bar
 loadingBar.frame = CGRect(x: 10, y: 90, width: w - 20, height: 3)
 loadingBar.progressTintColor = .systemBlue
 loadingBar.trackTintColor = .clear
 loadingBar.isHidden = true
 view.addSubview(loadingBar)
-// Row 2: Browser Tabs Bar (+ New Tab, Tab 1, Tab 2, Close)
-tabScroll.frame = CGRect(x: 10, y: 95, width: w - 20, height: 32)
-tabScroll.showsHorizontalScrollIndicator = false
-view.addSubview(tabScroll)
-// Row 3: App & Input Shortcuts
-let row3: [(String, Selector)] = [
+// Row 2: App & Input Shortcuts
+let row2: [(String, Selector)] = [
 ("YouTube", #selector(openYouTube)),
 ("Chrome", #selector(openChrome)),
 ("Type Box", #selector(sendTextToPageBox)),
 ("Dock", #selector(toggleDock))
 ]
 let btnW4 = (w - 38) / 4
-for (i, item) in row3.enumerated() {
+for (i, item) in row2.enumerated() {
 let btn = makeSmallButton(
 title: item.0,
-frame: CGRect(x: 10 + CGFloat(i) * (btnW4 + 6), y: 132, width: btnW4, height: 32),
+frame: CGRect(x: 10 + CGFloat(i) * (btnW4 + 6), y: 96, width: btnW4, height: 32),
 action: item.1
 )
 view.addSubview(btn)
 }
-// Row 4: Media Controls
-let row4: [(String, Selector)] = [
+// Row 3: Media Controls
+let row3: [(String, Selector)] = [
 ("-15s", #selector(rewind15)),
 ("Play/Pause", #selector(togglePlayPause)),
 ("+15s", #selector(forward15)),
 ("Full / Exit", #selector(toggleFullscreen))
 ]
-for (i, item) in row4.enumerated() {
+for (i, item) in row3.enumerated() {
 let btn = makeSmallButton(
 title: item.0,
-frame: CGRect(x: 10 + CGFloat(i) * (btnW4 + 6), y: 169, width: btnW4, height: 32),
+frame: CGRect(x: 10 + CGFloat(i) * (btnW4 + 6), y: 133, width: btnW4, height: 32),
 action: item.1
 )
 view.addSubview(btn)
 }
-// Row 5: Video Slider + Timestamp
+// Row 4: Video Slider + Timestamp
 timeLabel.text = "0:00 / 0:00"
 timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
 timeLabel.textColor = .secondaryLabel
 timeLabel.textAlignment = .right
-timeLabel.frame = CGRect(x: w - 94, y: 207, width: 84, height: 26)
+timeLabel.frame = CGRect(x: w - 94, y: 171, width: 84, height: 26)
 view.addSubview(timeLabel)
 videoSlider.minimumValue = 0
 videoSlider.maximumValue = 1
 videoSlider.value = 0
-videoSlider.frame = CGRect(x: 12, y: 205, width: w - 112, height: 30)
+videoSlider.frame = CGRect(x: 12, y: 169, width: w - 112, height: 30)
 videoSlider.addTarget(self, action: #selector(sliderTouchDown), for: .touchDown)
 videoSlider.addTarget(self, action: #selector(sliderChanged), for: .valueChanged)
 videoSlider.addTarget(self, action: #selector(sliderTouchUp), for: [.touchUpInside, .touchUpOutside])
 view.addSubview(videoSlider)
+// Chrome-Only Tabs Bar (Hidden in YouTube/Netflix/Desktop!)
+chromeTabScroll.frame = CGRect(x: 10, y: 204, width: w - 20, height: 32)
+chromeTabScroll.showsHorizontalScrollIndicator = false
+chromeTabScroll.isHidden = true
+view.addSubview(chromeTabScroll)
 // Trackpad Surface
 trackpadView.backgroundColor = .secondarySystemBackground
 trackpadView.layer.cornerRadius = 16
-trackpadView.frame = CGRect(x: 10, y: 240, width: w - 20, height: view.bounds.height - 266)
+trackpadView.frame = CGRect(x: 10, y: 206, width: w - 20, height: view.bounds.height - 232)
 view.addSubview(trackpadView)
 let movePan = UIPanGestureRecognizer(target: self, action: #selector(handleMovePan(_:)))
 movePan.maximumNumberOfTouches = 1
@@ -522,7 +555,6 @@ trackpadView.addGestureRecognizer(scrollPan)
 trackpadView.addGestureRecognizer(pinch)
 trackpadView.addGestureRecognizer(doubleTap)
 trackpadView.addGestureRecognizer(singleTap)
-rebuildTabsBar()
 startVideoProgressTimer()
 }
 private func bindExternalCallbacks() {
@@ -535,16 +567,17 @@ self?.urlField.becomeFirstResponder()
 }
 }
 }
-if ext.onTabsOrLoadChanged == nil {
-ext.onTabsOrLoadChanged = { [weak self] in
+if ext.onStateChanged == nil {
+ext.onStateChanged = { [weak self] in
 DispatchQueue.main.async {
-self?.updateLoadingAndTabsUI()
+self?.updateUIState()
 }
 }
 }
 }
-private func updateLoadingAndTabsUI() {
+private func updateUIState() {
 guard let ext = externalVC else { return }
+let w = view.bounds.width
 if let wv = ext.activeWebView, wv.isLoading {
 loadingBar.isHidden = false
 loadingBar.setProgress(Float(max(0.15, wv.estimatedProgress)), animated: true)
@@ -554,10 +587,16 @@ loadingBar.isHidden = true
 loadingBar.progress = 0
 reloadBtn.setTitle("↻", for: .normal)
 }
-rebuildTabsBar()
+// Show Chrome tabs ONLY when Chrome mode is active
+chromeTabScroll.isHidden = !ext.isChromeMode
+let padTop: CGFloat = ext.isChromeMode ? 242 : 206
+trackpadView.frame = CGRect(x: 10, y: padTop, width: w - 20, height: view.bounds.height - padTop - 26)
+if ext.isChromeMode {
+rebuildChromeTabsBar()
 }
-private func rebuildTabsBar() {
-for sub in tabScroll.subviews { sub.removeFromSuperview() }
+}
+private func rebuildChromeTabsBar() {
+for sub in chromeTabScroll.subviews { sub.removeFromSuperview() }
 var x: CGFloat = 0
 let addBtn = UIButton(type: .system)
 addBtn.setTitle("+ Tab", for: .normal)
@@ -565,16 +604,16 @@ addBtn.titleLabel?.font = .systemFont(ofSize: 12, weight: .bold)
 addBtn.backgroundColor = .systemBlue.withAlphaComponent(0.18)
 addBtn.layer.cornerRadius = 7
 addBtn.frame = CGRect(x: x, y: 2, width: 54, height: 28)
-addBtn.addTarget(self, action: #selector(addNewTab), for: .touchUpInside)
-tabScroll.addSubview(addBtn)
+addBtn.addTarget(self, action: #selector(addNewChromeTab), for: .touchUpInside)
+chromeTabScroll.addSubview(addBtn)
 x += 60
-let count = externalVC?.tabs.count ?? 0
-let activeIdx = externalVC?.activeTabIndex ?? 0
+let count = externalVC?.chromeTabs.count ?? 0
+let activeIdx = externalVC?.activeChromeTab ?? 0
 for i in 0..<count {
 let isSelected = (i == activeIdx)
-let wv = externalVC?.tabs[i]
-let host = wv?.url?.host?.replacingOccurrences(of: "www.", with: "") ?? "New Tab"
-let labelText = host.isEmpty ? "New Tab" : host
+let wv = externalVC?.chromeTabs[i]
+let host = wv?.url?.host?.replacingOccurrences(of: "www.", with: "") ?? "Google"
+let labelText = host.isEmpty ? "Google" : host
 let tabBtn = UIButton(type: .system)
 tabBtn.setTitle("  (labelText)", for: .normal)
 tabBtn.contentHorizontalAlignment = .left
@@ -583,18 +622,18 @@ tabBtn.backgroundColor = isSelected ? .systemBlue.withAlphaComponent(0.25) : .se
 tabBtn.layer.cornerRadius = 7
 tabBtn.tag = i
 tabBtn.frame = CGRect(x: x, y: 2, width: 108, height: 28)
-tabBtn.addTarget(self, action: #selector(selectTab(_:)), for: .touchUpInside)
-tabScroll.addSubview(tabBtn)
+tabBtn.addTarget(self, action: #selector(selectChromeTab(_:)), for: .touchUpInside)
+chromeTabScroll.addSubview(tabBtn)
 let closeBtn = UIButton(type: .system)
 closeBtn.setTitle("×", for: .normal)
 closeBtn.titleLabel?.font = .systemFont(ofSize: 14, weight: .bold)
 closeBtn.tag = i
 closeBtn.frame = CGRect(x: x + 84, y: 2, width: 24, height: 28)
-closeBtn.addTarget(self, action: #selector(closeTabTapped(_:)), for: .touchUpInside)
-tabScroll.addSubview(closeBtn)
+closeBtn.addTarget(self, action: #selector(closeChromeTabTapped(_:)), for: .touchUpInside)
+chromeTabScroll.addSubview(closeBtn)
 x += 114
 }
-tabScroll.contentSize = CGSize(width: max(x, tabScroll.bounds.width), height: 32)
+chromeTabScroll.contentSize = CGSize(width: max(x, chromeTabScroll.bounds.width), height: 32)
 }
 private func makeNavButton(title: String, frame: CGRect, action: Selector) -> UIButton {
 let btn = UIButton(type: .system)
@@ -632,17 +671,17 @@ wv.stopLoading()
 } else {
 wv.reload()
 }
-updateLoadingAndTabsUI()
+updateUIState()
 }
-@objc private func addNewTab() {
+@objc private func addNewChromeTab() {
 urlField.text = ""
-externalVC?.openURL("google.com", newTab: true)
+externalVC?.addChromeTab(urlString: "google.com")
 }
-@objc private func selectTab(_ sender: UIButton) {
-externalVC?.switchToTab(index: sender.tag)
+@objc private func selectChromeTab(_ sender: UIButton) {
+externalVC?.switchChromeTab(index: sender.tag)
 }
-@objc private func closeTabTapped(_ sender: UIButton) {
-externalVC?.closeTab(index: sender.tag)
+@objc private func closeChromeTabTapped(_ sender: UIButton) {
+externalVC?.closeChromeTab(index: sender.tag)
 }
 @objc private func openYouTube() { urlField.text = ""; externalVC?.launchYouTube() }
 @objc private func openChrome() { urlField.text = ""; externalVC?.launchChrome() }
@@ -685,7 +724,11 @@ target = "https://" + text
 let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
 target = "google.com" + encoded
 }
-self.externalVC?.openURL(target, newTab: false)
+if self.externalVC?.isChromeMode == true {
+self.externalVC?.launchChrome(urlString: target)
+} else {
+self.externalVC?.openSingleApp(target)
+}
 }
 self.urlField.resignFirstResponder()
 }
