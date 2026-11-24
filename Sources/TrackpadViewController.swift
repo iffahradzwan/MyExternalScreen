@@ -307,16 +307,15 @@ gesture.setTranslation(.zero, in: trackpadView)
 ext.moveCursor(dx: delta.x * 2.2, dy: delta.y * 2.2)
 }
 @objc private func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
-    guard let ext = externalVC, let webView = ext.activeWebView else { return }
+    guard let scrollView = externalVC?.activeWebView?.scrollView else { return }
     let delta = gesture.translation(in: trackpadView)
     gesture.setTranslation(.zero, in: trackpadView)
-    let dy = -Double(delta.y) * 2.5
-    let tip = CGPoint(x: ext.cursorView.frame.minX + 4, y: ext.cursorView.frame.minY + 3)
-    let pt = ext.view.convert(tip, to: webView)
-    let js = "var el=document.elementFromPoint(\(pt.x),\(pt.y));while(el&&el!==document.body){var s=getComputedStyle(el);if((s.overflowY==='auto'||s.overflowY==='scroll')&&el.scrollHeight>el.clientHeight){el.scrollTop+=\(dy);break;}el=el.parentElement;}if(!el||el===document.body){window.scrollBy(0,\(dy));}"
-    webView.evaluateJavaScript(js, completionHandler: nil)
+    let maxX = max(0, scrollView.contentSize.width - scrollView.bounds.width)
+    let maxY = max(0, scrollView.contentSize.height - scrollView.bounds.height)
+    let newX = min(max(0, scrollView.contentOffset.x - delta.x * 2.2), maxX)
+    let newY = min(max(0, scrollView.contentOffset.y - delta.y * 2.2), maxY)
+    scrollView.setContentOffset(CGPoint(x: newX, y: newY), animated: false)
 }
-
 
 @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
 guard let scrollView = externalVC?.activeWebView?.scrollView else { return }
