@@ -235,7 +235,7 @@ if isWindowFullscreen || isVideoZoomedFull {
             img.tintColor = .white
             img.contentMode = .scaleAspectFit
             img.frame = CGRect(x: 12, y: 12, width: 28, height: 28)
-squircle.addSubview(img)
+            squircle.addSubview(img)
 iconBtn.addSubview(squircle)
 let lbl = UILabel(frame: CGRect(x: 0, y: 60, width: 82, height: 20))
 lbl.text = item.0
