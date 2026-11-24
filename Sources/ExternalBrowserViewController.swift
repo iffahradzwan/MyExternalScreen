@@ -6,7 +6,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
     var netflixWebView: WKWebView!
     var chromeWebView: WKWebView!
     
-    var chromeTabURLs: [String] = ["https://www.google.com"]
+    var chromeTabURLs: [String] = ["https://google.com"]
     var chromeTabTitles: [String] = ["Google"]
     var activeChromeTab: Int = 0
     
