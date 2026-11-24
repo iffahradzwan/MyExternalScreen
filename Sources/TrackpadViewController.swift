@@ -77,44 +77,37 @@ deinit {
     }
 
         
-        timeLabel.text = "0:00 / 0:00"
-        timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-        timeLabel.textColor = .secondaryLabel
-        timeLabel.textAlignment = .right
-        timeLabel.frame = CGRect(x: w - 96, y: 186, width: 84, height: 28)
-        view.addSubview(timeLabel)
-        
-        videoSlider.minimumValue = 0
-        videoSlider.maximumValue = 1
-        videoSlider.value = 0
-        videoSlider.frame = CGRect(x: 14, y: 184, width: w - 116, height: 32)
-        videoSlider.addTarget(self, action: #selector(sliderTouchDown), for: .touchDown)
-        videoSlider.addTarget(self, action: #selector(sliderChanged), for: .valueChanged)
-        videoSlider.addTarget(self, action: #selector(sliderTouchUp), for: [.touchUpInside, .touchUpOutside])
-        view.addSubview(videoSlider)
-        
-        let hintLabel = UILabel(frame: CGRect(x: 12, y: 218, width: w - 24, height: 18))
-        hintLabel.text = "1-finger: Cursor • Tap: Click • Double-tap L/R: ±15s • 2-finger: Scroll/Zoom"
-        hintLabel.font = .systemFont(ofSize: 10.5, weight: .medium)
-        hintLabel.textColor = .secondaryLabel
-        hintLabel.textAlignment = .center
-        view.addSubview(hintLabel)
-        
-        trackpadView.backgroundColor = .secondarySystemBackground
-        trackpadView.layer.cornerRadius = 20
-        trackpadView.layer.borderWidth = 1
-        trackpadView.layer.borderColor = UIColor.separator.withAlphaComponent(0.4).cgColor
-        trackpadView.frame = CGRect(x: 12, y: 242, width: w - 24, height: view.bounds.height - 270)
-        view.addSubview(trackpadView)
-        
-        let padWatermark = UILabel()
-        padWatermark.text = "XeOS TRACKPAD"
-        padWatermark.font = .systemFont(ofSize: 12, weight: .bold)
-        padWatermark.textColor = .tertiaryLabel
-        padWatermark.textAlignment = .center
-        padWatermark.frame = CGRect(x: 0, y: trackpadView.bounds.height - 32, width: trackpadView.bounds.width, height: 20)
-        padWatermark.autoresizingMask = [.flexibleWidth, .flexibleTopMargin]
-        trackpadView.addSubview(padWatermark)
+       timeLabel.text = "0:00 / 0:00"
+timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+timeLabel.textColor = .secondaryLabel
+timeLabel.textAlignment = .right
+view.addSubview(timeLabel)
+
+videoSlider.minimumValue = 0
+videoSlider.maximumValue = 1
+videoSlider.value = 0
+videoSlider.addTarget(self, action: #selector(sliderTouchDown), for: .touchDown)
+videoSlider.addTarget(self, action: #selector(sliderChanged), for: .valueChanged)
+videoSlider.addTarget(self, action: #selector(sliderTouchUp), for: [.touchUpInside, .touchUpOutside])
+view.addSubview(videoSlider)
+
+hintLabel.text = "1-finger: Cursor • Tap: Click • Double-tap L/R: ±15s • 2-finger: Scroll/Zoom"
+hintLabel.font = .systemFont(ofSize: 10.5, weight: .medium)
+hintLabel.textColor = .secondaryLabel
+hintLabel.textAlignment = .center
+view.addSubview(hintLabel)
+
+trackpadView.backgroundColor = .secondarySystemBackground
+trackpadView.layer.cornerRadius = 20
+trackpadView.layer.borderWidth = 1
+trackpadView.layer.borderColor = UIColor.separator.withAlphaComponent(0.4).cgColor
+view.addSubview(trackpadView)
+
+padWatermark.text = "XeOS TRACKPAD"
+padWatermark.font = .systemFont(ofSize: 12, weight: .bold)
+padWatermark.textColor = .tertiaryLabel
+padWatermark.textAlignment = .center
+trackpadView.addSubview(padWatermark)
         
         let movePan = UIPanGestureRecognizer(target: self, action: #selector(handleMovePan(_:)))
         movePan.maximumNumberOfTouches = 1
@@ -252,9 +245,10 @@ target = text
 } else if text.contains(".") && !text.contains(" ") {
 target = "https://" + text
 } else {
-    var comps = URLComponents(string: "https://google.com")!
-    comps.queryItems = [URLQueryItem(name: "q", value: text)]
-    target = comps.url?.absoluteString ?? "https://google.com"
+   var comps = URLComponents(string: "https://google.com")!
+comps.queryItems = [URLQueryItem(name: "q", value: text)]
+target = comps.url?.absoluteString ?? "https://google.com"
+
 }
 
 if self.externalVC?.currentMode == .youtube, let url = URL(string: target) {
