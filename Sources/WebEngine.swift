@@ -85,9 +85,9 @@ final class WebEngine {
 
 
 
-static func dragTo(point: CGPoint, in webView: WKWebView?) {
-    // Dispatches pointermove and mousemove events to the dragged element or target point.
-    let j1 = "var el=window.__dragEl||document.elementFromPoint(\(Double(point.x)),\(Double(point.y)))||document.body;"
+static func mouseDownAt(point: CGPoint, in webView: WKWebView?) {
+    // Dispatches pointerdown and mousedown events to the element at the specified point, handling iframes via postMessage.
+    let j1 = "var el=document.elementFromPoint(\(Double(point.x)),\(Double(point.y)))||document.body;"
     // ...iframe and event dispatch logic...
     webView?.evaluateJavaScript(j1 + "...", completionHandler: nil)
 }
