@@ -391,7 +391,8 @@ widgetGreetingLabel.text = "Good Afternoon • Ready to Work"
 widgetGreetingLabel.text = "Good Evening • Ready to Work"
 }
 let level = UIDevice.current.batteryLevel
-menuBatteryLabel.text = level >= 0 ? "🔋 (Int(level * 100))%" : "🔋 100%"
+    menuBatteryLabel.text = level >= 0 ? "🔋 \(Int(level * 100))%" : "🔋 100%"
+
 }
 // MARK: - macOS Floating Window Container
 private func setupAppWindow() {
@@ -591,7 +592,8 @@ updateDockIndicators()
 view.setNeedsLayout()
 view.layoutIfNeeded()
 if youtubeWebView.url == nil {
-loadFresh("youtube.com", into: youtubeWebView)
+    loadFresh("https://youtube.com", into: youtubeWebView)
+
 }
 }
 @objc func launchNetflix() {
@@ -611,7 +613,8 @@ updateDockIndicators()
 view.setNeedsLayout()
 view.layoutIfNeeded()
 if netflixWebView.url == nil {
-loadFresh("netflix.com", into: netflixWebView)
+    loadFresh("https://netflix.com", into: netflixWebView)
+
 }
 }
 @objc func launchChromeDefault() { openInChrome(urlString: nil) }
