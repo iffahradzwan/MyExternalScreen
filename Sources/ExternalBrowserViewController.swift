@@ -569,6 +569,8 @@ isVideoZoomedFull = false
 menuAppTitleLabel.text = "Finder"
 desktopView.isHidden = false
 appWindowContainer.isHidden = true
+menuBar.isHidden = false
+windowTitleBar.isHidden = false
 dockView.isHidden = false
 updateDockIndicators()
 view.bringSubviewToFront(desktopView)
