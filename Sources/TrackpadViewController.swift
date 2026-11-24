@@ -147,6 +147,11 @@ trackpadView.addGestureRecognizer(swipeLeft)
 let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
 longPress.minimumPressDuration = 0.55
 trackpadView.addGestureRecognizer(longPress)
+       let tapDrag = UILongPressGestureRecognizer(target: self, action: #selector(handleTapDrag(_:)))
+tapDrag.minimumPressDuration = 0.25
+longPress.require(toFail: tapDrag)
+trackpadView.addGestureRecognizer(tapDrag)
+
 
         startVideoProgressTimer()
     }
@@ -385,5 +390,43 @@ WebEngine.skipVideo(seconds: sec, in: externalVC?.activeWebView)
         self?.present(sheet, animated: true)
     }
 }
+    private var lastDragLocation: CGPoint = .zero
+private var didActuallyDrag = false
+
+@objc private func handleTapDrag(_ gesture: UILongPressGestureRecognizer) {
+    guard let ext = externalVC, let webView = ext.activeWebView else { return }
+    let loc = gesture.location(in: trackpadView)
+    let tip = CGPoint(x: ext.cursorView.frame.minX + 4, y: ext.cursorView.frame.minY + 3)
+    let webPt = ext.view.convert(tip, to: webView)
+
+    switch gesture.state {
+    case .began:
+        lastDragLocation = loc
+        didActuallyDrag = false
+        UIView.animate(withDuration: 0.1) {
+            ext.cursorView.transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
+        }
+        WebEngine.mouseDownAt(point: webPt, in: webView)
+    case .changed:
+        let dx = (loc.x - lastDragLocation.x) * 1.8
+        let dy = (loc.y - lastDragLocation.y) * 1.8
+        if abs(dx) > 1 || abs(dy) > 1 { didActuallyDrag = true }
+        lastDragLocation = loc
+        ext.moveCursor(dx: dx, dy: dy)
+        let updatedTip = CGPoint(x: ext.cursorView.frame.minX + 4, y: ext.cursorView.frame.minY + 3)
+        WebEngine.dragTo(point: ext.view.convert(updatedTip, to: webView), in: webView)
+    case .ended, .cancelled:
+        UIView.animate(withDuration: 0.1) {
+            ext.cursorView.transform = .identity
+        }
+        WebEngine.mouseUpAt(point: webPt, in: webView)
+        if !didActuallyDrag {
+            gesture.state = .failed
+        }
+    default:
+        break
+    }
+}
+
 
 }
