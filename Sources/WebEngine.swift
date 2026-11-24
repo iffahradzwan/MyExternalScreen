@@ -68,7 +68,7 @@ final class WebEngine {
         let c16 = "if(window.PointerEvent){t.dispatchEvent(new PointerEvent('pointerup',po));}"
         let c17 = "t.dispatchEvent(new MouseEvent('mouseup',mo));"
         let c18 = "t.dispatchEvent(new MouseEvent('click',mo));"
-        let c19 = "if(t.tagName==='A'&&t.target==='_blank'){return {isInput:false,hitFullscreen:false};}if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0){window.location.href=t.href;}"
+        let c19 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0&&t.target!=='_blank'){window.location.href=t.href;}"
         let c20 = "return {isInput:false,hitFullscreen:false};})();"
         
         webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20) { res, _ in
