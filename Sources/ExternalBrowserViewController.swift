@@ -294,7 +294,7 @@ let slot = firstWeekday + (day - 1)
 let row = slot / 7
 let col = slot % 7
 let dayLbl = UILabel(frame: CGRect(x: 14 + CGFloat(col) * colW, y: 58 + CGFloat(row) * 21, width: colW, height: 20))
-dayLbl.text = "(day)"
+dayLbl.text = "\(day)"
 dayLbl.font = .monospacedDigitSystemFont(ofSize: 11, weight: day == todayDay ? .bold : .medium)
 dayLbl.textAlignment = .center
 if day == todayDay {
@@ -480,7 +480,7 @@ chromeTabScroll.contentSize = CGSize(width: max(x, chromeTabScroll.bounds.width)
 }
 @objc private func monitorSelectTab(_ sender: UIButton) { switchChromeTab(index: sender.tag) }
 @objc private func monitorCloseTab(_ sender: UIButton) { closeChromeTab(index: sender.tag) }
-@objc private func monitorAddTab() { addChromeTab(urlString: "google.com") }
+@objc private func monitorAddTab() { addChromeTab(urlString: "https://google.com") }
 func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
 if webView === chromeWebView, let current = webView.url?.absoluteString, current.hasPrefix("http") {
 if chromeTabURLs.indices.contains(activeChromeTab) {
@@ -649,7 +649,7 @@ loadFresh(chromeTabURLs[activeChromeTab], into: chromeWebView)
 }
 }
 }
-func addChromeTab(urlString: String = "google.com") {
+func addChromeTab(urlString: String = "https://google.com") {
 chromeTabURLs.append(urlString)
 chromeTabTitles.append("Google")
 activeChromeTab = chromeTabURLs.count - 1
