@@ -634,7 +634,7 @@ updateDockIndicators()
 view.setNeedsLayout()
 view.layoutIfNeeded()
 if chromeTabURLs.isEmpty {
-chromeTabURLs = ["google.com"]
+chromeTabURLs = ["https://google.com"]
 chromeTabTitles = ["Google"]
 activeChromeTab = 0
 }
@@ -665,7 +665,7 @@ guard chromeTabURLs.indices.contains(index) else { return }
 chromeTabURLs.remove(at: index)
 chromeTabTitles.remove(at: index)
 if chromeTabURLs.isEmpty {
-chromeTabURLs = ["google.com"]
+chromeTabURLs = ["https://google.com"]
 chromeTabTitles = ["Google"]
 activeChromeTab = 0
 } else {
