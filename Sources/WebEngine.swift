@@ -13,7 +13,7 @@ final class WebEngine {
         let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){};"
         let s3 = "Element.prototype.requestFullscreen=function(){return Promise.resolve();};"
         let s4 = "Element.prototype.webkitRequestFullscreen=function(){};"
-        let s5 = "var st=document.createElement('style');st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container{display:none!important;}';document.documentElement.appendChild(st);"
+        let s5 = "var st=document.createElement('style');st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container{display:none!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
         let s6 = "var wasMuted=false;setInterval(function(){"
         let s7 = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
         let s8 = "var s=document.querySelector('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text');"
@@ -25,7 +25,7 @@ final class WebEngine {
         
         let script = WKUserScript(
             source: s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13,
-            injectionTime: .atDocumentStart,
+            injectionTime: .atDocumentEnd,
             forMainFrameOnly: false
         )
         config.userContentController.addUserScript(script)
@@ -116,7 +116,7 @@ final class WebEngine {
     static func skipVideo(seconds: Double, in webView: WKWebView?) {
         let sec = String(seconds)
         let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-        let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+        let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
         let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}})();"
         webView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
     }
@@ -124,23 +124,24 @@ final class WebEngine {
     static func seekVideo(fraction: Double, in webView: WKWebView?) {
         let frac = String(fraction)
         let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-        let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+        let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
         let k3 = "if(v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*" + frac + ";}})();"
         webView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
     }
     
     static func togglePlayPause(in webView: WKWebView?) {
         let p1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-        let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids[0];"
+        let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids;"
         let p3 = "if(v){v.paused?v.play():v.pause();}})();"
         webView?.evaluateJavaScript(p1 + p2 + p3, completionHandler: nil)
     }
     
     static func getVideoProgress(in webView: WKWebView?, completion: @escaping (Double, Double) -> Void) {
         let t1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-        let t2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+        let t2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
         let t3 = "if(!v||!isFinite(v.duration)||v.duration<=0)return null;return [v.currentTime,v.duration];})();"
-        webView?.evaluateJavaScript(t1 + t2 + t3) { result, _ in
+Use code with caution.
+webView?.evaluateJavaScript(t1 + t2 + t3) { result, _ in
 guard let arr = result as? [Double], let cur = arr.first, let dur = arr.last, dur > 0 else { return }
 completion(cur, dur)
 }
