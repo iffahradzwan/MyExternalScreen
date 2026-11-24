@@ -52,7 +52,7 @@ final class WebEngine {
         
         let c1 = "(function(){var doc=document;var x=" + px + ";var y=" + py + ";"
         let c2 = "var el=doc.elementFromPoint(x,y);"
-       let c3 = "while(el&&el.tagName==='IFRAME'){...try{el.contentWindow.postMessage({cmd:'click',x:x,y:y},'*');}catch(e2){}return {isInput:false,hitFullscreen:false};}}"
+       let c3 = "while(el&&el.tagName==='IFRAME'){var r=el.getBoundingClientRect();x-=r.left;y-=r.top;try{doc=el.contentDocument;if(!doc)throw 1;el=doc.elementFromPoint(x,y);}catch(e){try{el.contentWindow.postMessage({cmd:'click',x:x,y:y},'*');}catch(e2){}return {isInput:false,hitFullscreen:false};}}"
         let c4 = "if(!el)return null;"
         let c5 = "var inp=el.matches('" + txtSel + "')?el:el.closest('" + txtSel + "');"
         let c6 = "if(!inp&&!el.closest('button,[role=button],a,[role=option],li')){var box=el.closest('[role=search],[role=combobox],.RNNXgb,.ytSearchboxComponentInputBox');if(box){inp=box.querySelector('" + txtSel + "');}}"
