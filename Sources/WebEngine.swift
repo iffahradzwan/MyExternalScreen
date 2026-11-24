@@ -118,8 +118,6 @@ final class WebEngine {
         // In skipVideo, seekVideo, and getVideoProgress:
 let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
 
-// In togglePlayPause:
-let p2 = " var v=vids.find(function(x){return x.duration>0;})||vids[0];"
 
         let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}})();"
         
@@ -131,8 +129,6 @@ let p2 = " var v=vids.find(function(x){return x.duration>0;})||vids[0];"
         let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"// In skipVideo, seekVideo, and getVideoProgress:
 let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
 
-// In togglePlayPause:
-let p2 = " var v=vids.find(function(x){return x.duration>0;})||vids[0];"
 
         let k3 = "if(v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*" + frac + ";}})();"
         webView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
@@ -140,7 +136,7 @@ let p2 = " var v=vids.find(function(x){return x.duration>0;})||vids[0];"
     
     static func togglePlayPause(in webView: WKWebView?) {
         let p1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-        let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids;"
+        let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids[0];"
         let p3 = "if(v){v.paused?v.play():v.pause();}})();"
         webView?.evaluateJavaScript(p1 + p2 + p3, completionHandler: nil)
     }
