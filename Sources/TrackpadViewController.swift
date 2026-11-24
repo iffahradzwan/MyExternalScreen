@@ -9,65 +9,73 @@ class ViewController: UIViewController {
     private let timeLabel = UILabel()
     private var isScrubbing = false
     private var progressTimer: Timer?
+    private var navButtons: [UIButton] = []
+private var row2Buttons: [UIButton] = []
+private var row3Buttons: [UIButton] = []
+private let hintLabel = UILabel()
+private let padWatermark = UILabel()
+
+deinit {
+    progressTimer?.invalidate()
+}
+
     
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .systemBackground
-        let w = view.bounds.width
-        
-        view.addSubview(makeNavButton(title: "⌂", frame: CGRect(x: 12, y: 56, width: 36, height: 38), action: #selector(goHome)))
-        view.addSubview(makeNavButton(title: "←", frame: CGRect(x: 52, y: 56, width: 36, height: 38), action: #selector(goBack)))
-        view.addSubview(makeNavButton(title: "→", frame: CGRect(x: 92, y: 56, width: 36, height: 38), action: #selector(goForward)))
-        
-        reloadBtn.setTitle("↻", for: .normal)
-        reloadBtn.titleLabel?.font = .systemFont(ofSize: 17, weight: .bold)
-        reloadBtn.backgroundColor = .secondarySystemBackground
-        reloadBtn.layer.cornerRadius = 10
-        reloadBtn.frame = CGRect(x: 132, y: 56, width: 36, height: 38)
-        reloadBtn.addTarget(self, action: #selector(reloadPage), for: .touchUpInside)
-        view.addSubview(reloadBtn)
-        
-        urlField.placeholder = "Search Google, enter URL, or type..."
-        urlField.borderStyle = .roundedRect
-        urlField.returnKeyType = .go
-        urlField.clearButtonMode = .whileEditing
-        urlField.autocapitalizationType = .none
-        urlField.autocorrectionType = .no
-        urlField.addTarget(self, action: #selector(liveTextChanged), for: .editingChanged)
-        urlField.addTarget(self, action: #selector(handleTextSubmit), for: .editingDidEndOnExit)
-        urlField.frame = CGRect(x: 174, y: 56, width: w - 186, height: 38)
-        view.addSubview(urlField)
-        
-        let row2: [(String, Selector)] = [
-            ("YouTube", #selector(openYouTube)),
-            ("Chrome", #selector(openChrome)),
-            ("Netflix", #selector(openNetflix)),
-            ("Dock", #selector(toggleDock))
-        ]
-        let btnW4 = (w - 42) / 4
-        for (i, item) in row2.enumerated() {
-            let btn = makeSmallButton(
-                title: item.0,
-                frame: CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: 102, width: btnW4, height: 35),
-                action: item.1
-            )
-            view.addSubview(btn)
-        }
-        
-        let row3: [(String, Selector)] = [
-            ("-15s", #selector(rewind15)),
-            ("Play / Pause", #selector(togglePlayPause)),
-            ("+15s", #selector(forward15)),
-            ("Full / Exit", #selector(toggleFullscreen))
-        ]
-        for (i, item) in row3.enumerated() {
-            let btn = makeSmallButton(
-                title: item.0,
-                frame: CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: 143, width: btnW4, height: 35),
-                action: item.1
-            )
-            view.addSubview(btn)
-        }
+   override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = .systemBackground
+
+    let navSpecs: [(String, Selector)] = [
+        ("⌂", #selector(goHome)),
+        ("←", #selector(goBack)),
+        ("→", #selector(goForward))
+    ]
+    for item in navSpecs {
+        let btn = makeNavButton(title: item.0, frame: .zero, action: item.1)
+        navButtons.append(btn)
+        view.addSubview(btn)
+    }
+
+    reloadBtn.setTitle("↻", for: .normal)
+    reloadBtn.titleLabel?.font = .systemFont(ofSize: 17, weight: .bold)
+    reloadBtn.backgroundColor = .secondarySystemBackground
+    reloadBtn.layer.cornerRadius = 10
+    reloadBtn.addTarget(self, action: #selector(reloadPage), for: .touchUpInside)
+    view.addSubview(reloadBtn)
+
+    urlField.placeholder = "Search Google, enter URL, or type..."
+    urlField.borderStyle = .roundedRect
+    urlField.returnKeyType = .go
+    urlField.clearButtonMode = .whileEditing
+    urlField.autocapitalizationType = .none
+    urlField.autocorrectionType = .no
+    urlField.addTarget(self, action: #selector(liveTextChanged), for: .editingChanged)
+    urlField.addTarget(self, action: #selector(handleTextSubmit), for: .editingDidEndOnExit)
+    view.addSubview(urlField)
+
+    let row2: [(String, Selector)] = [
+        ("YouTube", #selector(openYouTube)),
+        ("Chrome", #selector(openChrome)),
+        ("Netflix", #selector(openNetflix)),
+        ("Dock", #selector(toggleDock))
+    ]
+    for item in row2 {
+        let btn = makeSmallButton(title: item.0, frame: .zero, action: item.1)
+        row2Buttons.append(btn)
+        view.addSubview(btn)
+    }
+
+    let row3: [(String, Selector)] = [
+        ("-15s", #selector(rewind15)),
+        ("Play / Pause", #selector(togglePlayPause)),
+        ("+15s", #selector(forward15)),
+        ("Full / Exit", #selector(toggleFullscreen))
+    ]
+    for item in row3 {
+        let btn = makeSmallButton(title: item.0, frame: .zero, action: item.1)
+        row3Buttons.append(btn)
+        view.addSubview(btn)
+    }
+
         
         timeLabel.text = "0:00 / 0:00"
         timeLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
@@ -133,7 +141,41 @@ class ViewController: UIViewController {
         
         startVideoProgressTimer()
     }
-    
+    override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    let w = view.bounds.width
+    let top = view.safeAreaInsets.top + 8
+    let bottom = view.safeAreaInsets.bottom + 12
+
+    for (i, btn) in navButtons.enumerated() {
+        btn.frame = CGRect(x: 12 + CGFloat(i) * 40, y: top, width: 36, height: 38)
+    }
+    reloadBtn.frame = CGRect(x: 132, y: top, width: 36, height: 38)
+    urlField.frame = CGRect(x: 174, y: top, width: w - 186, height: 38)
+
+    let btnW4 = (w - 42) / 4
+    let r2Y = top + 46
+    for (i, btn) in row2Buttons.enumerated() {
+        btn.frame = CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: r2Y, width: btnW4, height: 35)
+    }
+
+    let r3Y = r2Y + 41
+    for (i, btn) in row3Buttons.enumerated() {
+        btn.frame = CGRect(x: 12 + CGFloat(i) * (btnW4 + 6), y: r3Y, width: btnW4, height: 35)
+    }
+
+    let sliderY = r3Y + 41
+    timeLabel.frame = CGRect(x: w - 96, y: sliderY + 2, width: 84, height: 28)
+    videoSlider.frame = CGRect(x: 14, y: sliderY, width: w - 116, height: 32)
+
+    let hintY = sliderY + 34
+    hintLabel.frame = CGRect(x: 12, y: hintY, width: w - 24, height: 18)
+
+    let padY = hintY + 24
+    trackpadView.frame = CGRect(x: 12, y: padY, width: w - 24, height: max(120, view.bounds.height - padY - bottom))
+    padWatermark.frame = CGRect(x: 0, y: trackpadView.bounds.height - 32, width: trackpadView.bounds.width, height: 20)
+}
+
     private func bindExternalCallbacks() {
         guard let ext = externalVC, ext.onInputSelected == nil else { return }
         ext.onInputSelected = { [weak self] existingText in
@@ -210,9 +252,11 @@ target = text
 } else if text.contains(".") && !text.contains(" ") {
 target = "https://" + text
 } else {
-let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-target = "google.com" + encoded
+    var comps = URLComponents(string: "https://google.com")!
+    comps.queryItems = [URLQueryItem(name: "q", value: text)]
+    target = comps.url?.absoluteString ?? "https://google.com"
 }
+
 if self.externalVC?.currentMode == .youtube, let url = URL(string: target) {
 self.externalVC?.youtubeWebView.load(URLRequest(url: url))
 } else if self.externalVC?.currentMode == .netflix, let url = URL(string: target) {
