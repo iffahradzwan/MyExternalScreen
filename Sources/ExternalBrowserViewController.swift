@@ -508,15 +508,6 @@ func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigatio
     decisionHandler(.allow)
 }
 
-    if let currentHost = webView.url?.host?.lowercased(),
-       navigationAction.navigationType == .other,
-       !targetHost.hasSuffix(currentHost),
-       !currentHost.hasSuffix(targetHost) {
-        decisionHandler(.cancel)
-        return
-    }
-    decisionHandler(.allow)
-}
 
 func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
     if let url = navigationAction.request.url, url.absoluteString.hasPrefix("http") {
