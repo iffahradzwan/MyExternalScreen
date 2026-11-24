@@ -143,9 +143,9 @@ let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||docume
     
     static func getVideoProgress(in webView: WKWebView?, completion: @escaping (Double, Double) -> Void) {
         let t1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-        let t2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
+        let t2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
         let t3 = "if(!v||!isFinite(v.duration)||v.duration<=0)return null;return [v.currentTime,v.duration];})();"
-Use code with caution.
+
 webView?.evaluateJavaScript(t1 + t2 + t3) { result, _ in
 guard let arr = result as? [Double], let cur = arr.first, let dur = arr.last, dur > 0 else { return }
 completion(cur, dur)
