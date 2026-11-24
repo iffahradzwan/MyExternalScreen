@@ -494,16 +494,24 @@ chromeTabScroll.contentSize = CGSize(width: max(x, chromeTabScroll.bounds.width)
 @objc private func monitorSelectTab(_ sender: UIButton) { switchChromeTab(index: sender.tag) }
 @objc private func monitorCloseTab(_ sender: UIButton) { closeChromeTab(index: sender.tag) }
 @objc private func monitorAddTab() { addChromeTab(urlString: "https://google.com") }
-func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-if webView === chromeWebView, let current = webView.url?.absoluteString, current.hasPrefix("http") {
-if chromeTabURLs.indices.contains(activeChromeTab) {
-chromeTabURLs[activeChromeTab] = current
-let pageTitle = (webView.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-let host = webView.url?.host?.replacingOccurrences(of: "www.", with: "") ?? "Google"
-chromeTabTitles[activeChromeTab] = pageTitle.isEmpty ? host : pageTitle
-rebuildMonitorChromeTabs()
-}
-}
+func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+    guard let targetURL = navigationAction.request.url,
+          let targetHost = targetURL.host?.lowercased() else {
+        decisionHandler(.allow)
+        return
+    }
+    if navigationAction.targetFrame == nil {
+        decisionHandler(.cancel)
+        return
+    }
+    if let currentHost = webView.url?.host?.lowercased(),
+       navigationAction.navigationType == .other,
+       !targetHost.hasSuffix(currentHost),
+       !currentHost.hasSuffix(targetHost) {
+        decisionHandler(.cancel)
+        return
+    }
+    decisionHandler(.allow)
 }
 // MARK: - Floating Dock & Arrow Cursor
 private func setupFloatingDock() {
