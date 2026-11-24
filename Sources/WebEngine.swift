@@ -13,6 +13,7 @@ final class WebEngine {
         let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){};"
         let s3 = "Element.prototype.requestFullscreen=function(){return Promise.resolve();};"
         let s4 = "Element.prototype.webkitRequestFullscreen=function(){};"
+        let s4b = "window.open=function(){return null;};"
         let s5 = "var st=document.createElement('style');st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container{display:none!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
         let s6 = "var wasMuted=false;setInterval(function(){"
         let s7 = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
@@ -24,7 +25,7 @@ final class WebEngine {
         let s13 = "},500);"
         
         let script = WKUserScript(
-            source: s1 + s2 + s3 + s4 + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13,
+            source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13,
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: false
         )
@@ -67,7 +68,7 @@ final class WebEngine {
         let c16 = "if(window.PointerEvent){t.dispatchEvent(new PointerEvent('pointerup',po));}"
         let c17 = "t.dispatchEvent(new MouseEvent('mouseup',mo));"
         let c18 = "t.dispatchEvent(new MouseEvent('click',mo));"
-        let c19 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0){window.location.href=t.href;}"
+        let c19 = "if(t.tagName==='A'&&t.target==='_blank'){return {isInput:false,hitFullscreen:false};}if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0){window.location.href=t.href;}"
         let c20 = "return {isInput:false,hitFullscreen:false};})();"
         
         webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20) { res, _ in
@@ -84,10 +85,12 @@ final class WebEngine {
     static func hoverAt(point: CGPoint, in webView: WKWebView?) {
     let x = Double(point.x)
     let y = Double(point.y)
-   let h1 = "var el=document.elementFromPoint(\(x),\(y));var onVid=el&&el.closest('#movie_player,.html5-video-player,video,#player-control-overlay');"
-let h2 = "var p=document.getElementById('movie_player');if(p){onVid?p.classList.remove('ytp-autohide'):p.classList.add('ytp-autohide');}"
-let h3 = "var ov=document.getElementById('player-control-overlay');if(ov){if(onVid){ov.classList.add('fadein');ov.style.opacity='1';}else{ov.classList.remove('fadein');ov.style.opacity='0';}}"
-    webView?.evaluateJavaScript(h1 + h2 + h3, completionHandler: nil)
+    let h1 = "var el=document.elementFromPoint(\(x),\(y));var onVid=el&&el.closest('#movie_player,.html5-video-player,video,#player-control-overlay');"
+    let h2 = "var p=document.getElementById('movie_player');if(p){onVid?p.classList.remove('ytp-autohide'):p.classList.add('ytp-autohide');}"
+    let h3 = "var ov=document.getElementById('player-control-overlay');if(ov){if(onVid){ov.classList.add('fadein');ov.style.opacity='1';}else{ov.classList.remove('fadein');ov.style.opacity='0';}}"
+    let h4 = "clearTimeout(window.__ytHideT);if(onVid){window.__ytHideT=setTimeout(function(){"
+    let h5 = "if(p)p.classList.add('ytp-autohide');if(ov){ov.classList.remove('fadein');ov.style.opacity='0';}},2500);}"
+    webView?.evaluateJavaScript(h1 + h2 + h3 + h4 + h5, completionHandler: nil)
 }
 
     
