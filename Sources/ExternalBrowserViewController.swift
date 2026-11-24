@@ -429,7 +429,18 @@ windowContentHolder.addSubview(youtubeWebView)
 windowContentHolder.addSubview(netflixWebView)
 windowContentHolder.addSubview(chromeWebView)
 }
-@objc private func closeActiveWindow() { showDesktop() }
+@objc private func closeActiveWindow() {
+    pauseAllMediaOnBackground()
+    UIView.animate(withDuration: 0.18, animations: {
+        self.appWindowContainer.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
+        self.appWindowContainer.alpha = 0
+    }) { _ in
+        self.appWindowContainer.transform = .identity
+        self.appWindowContainer.alpha = 1
+        self.showDesktop()
+    }
+}
+
 @objc private func minimizeActiveWindow() { showDesktop() }
 @objc private func toggleWindowMaxSize() {
 isWindowFullscreen.toggle()
