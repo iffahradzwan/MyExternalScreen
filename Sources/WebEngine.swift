@@ -87,7 +87,7 @@ final class WebEngine {
    let h1 = "var el=document.elementFromPoint(\(x),\(y));var onVid=el&&el.closest('#movie_player,.html5-video-player,video,#player-control-overlay');"
 let h2 = "var p=document.getElementById('movie_player');if(p){onVid?p.classList.remove('ytp-autohide'):p.classList.add('ytp-autohide');}"
 let h3 = "var ov=document.getElementById('player-control-overlay');if(ov){if(onVid){ov.classList.add('fadein');ov.style.opacity='1';}else{ov.classList.remove('fadein');ov.style.opacity='0';}}"
-    webView?.evaluateJavaScript(js, completionHandler: nil)
+    webView?.evaluateJavaScript(h1 + h2 + h3, completionHandler: nil)
 }
 
     
