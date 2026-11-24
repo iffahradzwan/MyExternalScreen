@@ -719,11 +719,29 @@ loadFresh(chromeTabURLs[activeChromeTab], into: chromeWebView)
 }
 }
 func addChromeTab(urlString: String = "https://google.com") {
-chromeTabURLs.append(urlString)
-chromeTabTitles.append("Google")
-activeChromeTab = chromeTabURLs.count - 1
-openInChrome(urlString: urlString)
+    chromeTabURLs.append(urlString)
+    chromeTabTitles.append("Loading...")
+    activeChromeTab = chromeTabURLs.count - 1
+    currentMode = .chrome
+    isVideoZoomedFull = false
+    menuAppTitleLabel.text = "Google Chrome"
+    windowTitleLabel.isHidden = true
+    chromeTabScroll.isHidden = false
+    desktopView.isHidden = true
+    appWindowContainer.isHidden = false
+    youtubeWebView.isHidden = true
+    netflixWebView.isHidden = true
+    chromeWebView.isHidden = false
+    updateDockIndicators()
+    rebuildMonitorChromeTabs()
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
+    if let url = URL(string: urlString) {
+        chromeWebView.stopLoading()
+        chromeWebView.load(URLRequest(url: url))
+    }
 }
+
 func switchChromeTab(index: Int) {
 guard chromeTabURLs.indices.contains(index) else { return }
 activeChromeTab = index
