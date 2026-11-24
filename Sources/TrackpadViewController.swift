@@ -103,7 +103,7 @@ trackpadView.layer.borderWidth = 1
 trackpadView.layer.borderColor = UIColor.separator.withAlphaComponent(0.4).cgColor
 view.addSubview(trackpadView)
 
-padWatermark.text = "XeOS TRACKPAD"
+padWatermark.text = "Pekaboo TRACKPAD"
 padWatermark.font = .systemFont(ofSize: 12, weight: .bold)
 padWatermark.textColor = .tertiaryLabel
 padWatermark.textAlignment = .center
@@ -144,6 +144,9 @@ scrollPan.require(toFail: swipeLeft)
 
 trackpadView.addGestureRecognizer(swipeRight)
 trackpadView.addGestureRecognizer(swipeLeft)
+let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
+longPress.minimumPressDuration = 0.55
+trackpadView.addGestureRecognizer(longPress)
 
         startVideoProgressTimer()
     }
@@ -364,4 +367,23 @@ let tapX = gesture.location(in: trackpadView).x
 let sec: Double = (tapX < trackpadView.bounds.width / 2) ? -15 : 15
 WebEngine.skipVideo(seconds: sec, in: externalVC?.activeWebView)
 }
+    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+    guard gesture.state == .began, let ext = externalVC, let webView = ext.activeWebView else { return }
+    let tip = CGPoint(x: ext.cursorView.frame.minX + 4, y: ext.cursorView.frame.minY + 3)
+    let pt = ext.view.convert(tip, to: webView)
+    let js = "(function(){var el=document.elementFromPoint(\(pt.x),\(pt.y));var a=el?el.closest('a'):null;return a&&a.href?a.href:null;})()"
+    webView.evaluateJavaScript(js) { [weak self] res, _ in
+        guard let href = res as? String, href.hasPrefix("http") else { return }
+        let sheet = UIAlertController(title: nil, message: href, preferredStyle: .actionSheet)
+        sheet.addAction(UIAlertAction(title: "Open in Current Tab", style: .default) { _ in
+            if let u = URL(string: href) { webView.load(URLRequest(url: u)) }
+        })
+        sheet.addAction(UIAlertAction(title: "Open in New Tab", style: .default) { _ in
+            ext.addChromeTab(urlString: href)
+        })
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        self?.present(sheet, animated: true)
+    }
+}
+
 }
