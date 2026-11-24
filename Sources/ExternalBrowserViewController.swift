@@ -184,7 +184,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         desktopView.layer.insertSublayer(glowGradient, at: 1)
         
         let brandTitle = UILabel()
-        brandTitle.text = "XeOS"
+        brandTitle.text = "Peekaboo"
         brandTitle.font = .systemFont(ofSize: 48, weight: .bold)
         brandTitle.textColor = UIColor.white.withAlphaComponent(0.90)
         brandTitle.textAlignment = .center
