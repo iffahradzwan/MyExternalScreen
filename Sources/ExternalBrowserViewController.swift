@@ -48,7 +48,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
     // Floating macOS Dock
     private let dockView = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
     private var dockDots: [AppMode: UIView] = [:]
-    
+    private var closedModes: Set<AppMode> = []
     private var isVideoZoomedFull = false
     private var didSetupViews = false
     private var statusTimer: Timer?
@@ -431,8 +431,9 @@ windowContentHolder.addSubview(chromeWebView)
 }
 @objc private func closeActiveWindow() {
     pauseAllMediaOnBackground()
+    closedModes.insert(currentMode)
     UIView.animate(withDuration: 0.18, animations: {
-        self.appWindowContainer.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
+        self.appWindowContainer.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
         self.appWindowContainer.alpha = 0
     }) { _ in
         self.appWindowContainer.transform = .identity
@@ -547,8 +548,11 @@ dockView.contentView.addSubview(btn)
 }
 }
 private func updateDockIndicators() {
-for (mode, dot) in dockDots { dot.isHidden = (mode != currentMode) }
+    for (mode, dot) in dockDots {
+        dot.isHidden = (mode != currentMode) || closedModes.contains(mode)
+    }
 }
+
 private func setupCursor() {
 cursorView.frame = CGRect(x: 0, y: 0, width: 24, height: 24)
 cursorView.backgroundColor = .clear
@@ -589,6 +593,19 @@ view.bringSubviewToFront(menuBar)
 view.bringSubviewToFront(dockView)
 view.bringSubviewToFront(cursorView)
 }
+
+    private func animateWindowOpen(for mode: AppMode) {
+    if closedModes.remove(mode) != nil {
+        appWindowContainer.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
+        appWindowContainer.alpha = 0
+        UIView.animate(withDuration: 0.22, delay: 0, options: .curveEaseOut) {
+            self.appWindowContainer.transform = .identity
+            self.appWindowContainer.alpha = 1
+        }
+    }
+}
+
+    
 @objc func launchYouTube() {
 pauseAllMediaOnBackground()
 currentMode = .youtube
@@ -599,6 +616,7 @@ windowTitleLabel.isHidden = false
 chromeTabScroll.isHidden = true
 desktopView.isHidden = true
 appWindowContainer.isHidden = false
+animateWindowOpen(for: .youtube)
 youtubeWebView.isHidden = false
 netflixWebView.isHidden = true
 chromeWebView.isHidden = true
@@ -610,6 +628,7 @@ if youtubeWebView.url == nil {
 
 }
 }
+    
 @objc func launchNetflix() {
 pauseAllMediaOnBackground()
 currentMode = .netflix
@@ -620,6 +639,7 @@ windowTitleLabel.isHidden = false
 chromeTabScroll.isHidden = true
 desktopView.isHidden = true
 appWindowContainer.isHidden = false
+animateWindowOpen(for: .netflix)
 youtubeWebView.isHidden = true
 netflixWebView.isHidden = false
 chromeWebView.isHidden = true
@@ -641,6 +661,7 @@ windowTitleLabel.isHidden = true
 chromeTabScroll.isHidden = false
 desktopView.isHidden = true
 appWindowContainer.isHidden = false
+animateWindowOpen(for: .chrome)
 youtubeWebView.isHidden = true
 netflixWebView.isHidden = true
 chromeWebView.isHidden = false
