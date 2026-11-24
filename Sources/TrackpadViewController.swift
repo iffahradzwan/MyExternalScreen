@@ -103,7 +103,7 @@ trackpadView.layer.borderWidth = 1
 trackpadView.layer.borderColor = UIColor.separator.withAlphaComponent(0.4).cgColor
 view.addSubview(trackpadView)
 
-padWatermark.text = "Pekaboo TRACKPAD"
+padWatermark.text = "Peekaboo TRACKPAD"
 padWatermark.font = .systemFont(ofSize: 12, weight: .bold)
 padWatermark.textColor = .tertiaryLabel
 padWatermark.textAlignment = .center
