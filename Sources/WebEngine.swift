@@ -23,9 +23,9 @@ final class WebEngine {
         let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
         let s12 = "if(ad&&v){if(!v.muted){wasMuted=false;v.muted=true;}if(v.playbackRate!==16){v.playbackRate=16;}}else if(v&&v.playbackRate===16){v.playbackRate=1;if(!wasMuted){v.muted=false;}}"
         let s13 = "},500);"
-        
+        let s14 = "window.addEventListener('message',function(e){var d=e.data;if(!d||!d.cmd)return;var v=document.querySelector('video');if(!v)return;if(d.cmd==='toggle'){v.paused?v.play():v.pause();}else if(d.cmd==='skip'&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+d.val),v.duration);}else if(d.cmd==='seek'&&isFinite(v.duration)){v.currentTime=v.duration*d.val;}});"
         let script = WKUserScript(
-            source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13,
+            source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: false
         )
@@ -88,9 +88,10 @@ final class WebEngine {
     let h1 = "var el=document.elementFromPoint(\(x),\(y));var onVid=el&&el.closest('#movie_player,.html5-video-player,video,#player-control-overlay');"
     let h2 = "var p=document.getElementById('movie_player');if(p){onVid?p.classList.remove('ytp-autohide'):p.classList.add('ytp-autohide');}"
     let h3 = "var ov=document.getElementById('player-control-overlay');if(ov){if(onVid){ov.classList.add('fadein');ov.style.opacity='1';}else{ov.classList.remove('fadein');ov.style.opacity='0';}}"
+        let h3b = "if(el){el.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:\(x),clientY:\(y)}));if(window.PointerEvent)el.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:\(x),clientY:\(y)}));}"
     let h4 = "clearTimeout(window.__ytHideT);if(onVid){window.__ytHideT=setTimeout(function(){"
     let h5 = "if(p)p.classList.add('ytp-autohide');if(ov){ov.classList.remove('fadein');ov.style.opacity='0';}},2500);}"
-    webView?.evaluateJavaScript(h1 + h2 + h3 + h4 + h5, completionHandler: nil)
+    webView?.evaluateJavaScript(h1 + h2 + h3 + h3b + h4 + h5, completionHandler: nil)
 }
 
     
@@ -132,7 +133,8 @@ final class WebEngine {
 let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
 
 
-        let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}})();"
+       let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({cmd:'skip',val:" + sec + "},'*');}catch(e){}});})();"
+
         
         webView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
     }
@@ -143,14 +145,16 @@ let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||docume
 let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
 
 
-        let k3 = "if(v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*" + frac + ";}})();"
+        let k3 = "if(v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*" + frac + ";}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({cmd:'seek',val:" + frac + "},'*');}catch(e){}});})();"
+
         webView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
     }
     
     static func togglePlayPause(in webView: WKWebView?) {
         let p1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
         let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids[0];"
-        let p3 = "if(v){v.paused?v.play():v.pause();}})();"
+       let p3 = "if(v){v.paused?v.play():v.pause();}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({cmd:'toggle'},'*');}catch(e){}});})();"
+
         webView?.evaluateJavaScript(p1 + p2 + p3, completionHandler: nil)
     }
     
