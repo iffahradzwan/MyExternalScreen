@@ -520,12 +520,14 @@ chromeTabScroll.contentSize = CGSize(width: max(x, chromeTabScroll.bounds.width)
 @objc private func monitorCloseTab(_ sender: UIButton) { closeChromeTab(index: sender.tag) }
 @objc private func monitorAddTab() { addChromeTab(urlString: "https://google.com") }
 func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-    guard let frame = navigationAction.targetFrame, frame.isMainFrame else {
-        decisionHandler(.allow)
+    if let scheme = navigationAction.request.url?.scheme?.lowercased(),
+       !["http", "https", "about"].contains(scheme) {
+        decisionHandler(.cancel)
         return
     }
     decisionHandler(.allow)
 }
+
 
 
 func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
