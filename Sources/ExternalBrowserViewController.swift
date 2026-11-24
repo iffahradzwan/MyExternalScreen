@@ -106,10 +106,11 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         dockView.frame = CGRect(x: (w - dockW) / 2, y: h - dockH - 14, width: dockW, height: dockH)
         
         let bottomClearance: CGFloat = dockView.isHidden ? 12 : (dockH + 26)
-        if isWindowFullscreen {
-            appWindowContainer.frame = CGRect(x: 0, y: menuH, width: w, height: h - menuH)
-            appWindowContainer.layer.cornerRadius = 0
-        } else {
+       if isWindowFullscreen || isVideoZoomedFull {
+    appWindowContainer.frame = isVideoZoomedFull ? view.bounds : CGRect(x: 0, y: menuH, width: w, height: h - menuH)
+    appWindowContainer.layer.cornerRadius = 0
+} else {
+
             let sideMargin: CGFloat = max(24, w * 0.04)
             let topMargin: CGFloat = menuH + 14
             appWindowContainer.frame = CGRect(
@@ -121,7 +122,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
             appWindowContainer.layer.cornerRadius = 16
         }
         
-        let titleBarH: CGFloat = (currentMode == .chrome) ? 42 : 34
+        let titleBarH: CGFloat = isVideoZoomedFull ? 0 : ((currentMode == .chrome) ? 42 : 34)
         windowTitleBar.frame = CGRect(x: 0, y: 0, width: appWindowContainer.bounds.width, height: titleBarH)
         windowTitleLabel.frame = CGRect(x: 90, y: 0, width: appWindowContainer.bounds.width - 180, height: 34)
         chromeTabScroll.frame = CGRect(x: 86, y: 4, width: appWindowContainer.bounds.width - 100, height: 34)
@@ -685,6 +686,11 @@ func moveCursor(dx: CGFloat, dy: CGFloat) {
 let newX = min(max(0, cursorView.center.x + dx), view.bounds.width)
 let newY = min(max(0, cursorView.center.y + dy), view.bounds.height)
 cursorView.center = CGPoint(x: newX, y: newY)
+    if let webView = activeWebView, currentMode != .desktop {
+    let tip = CGPoint(x: cursorView.frame.minX + 4, y: cursorView.frame.minY + 3)
+    WebEngine.hoverAt(point: view.convert(tip, to: webView), in: webView)
+}
+
 }
 func clickAtCursor() {
 // Tip of the arrow cursor sits near the top-left of cursorView
@@ -765,7 +771,13 @@ onInput: { [weak self] existingText in self?.onInputSelected?(existingText) }
 )
 }
 func toggleFullscreen() {
-isVideoZoomedFull.toggle()
-WebEngine.toggleWebFullscreen(isFull: isVideoZoomedFull, in: activeWebView)
+    isVideoZoomedFull.toggle()
+    dockView.isHidden = isVideoZoomedFull
+    menuBar.isHidden = isVideoZoomedFull
+    windowTitleBar.isHidden = isVideoZoomedFull
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
+    WebEngine.toggleWebFullscreen(isFull: isVideoZoomedFull, in: activeWebView)
 }
+
 }
