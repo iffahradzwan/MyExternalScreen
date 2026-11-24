@@ -23,7 +23,7 @@ final class WebEngine {
         let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
         let s12 = "if(ad&&v){if(!v.muted){wasMuted=false;v.muted=true;}if(v.playbackRate!==16){v.playbackRate=16;}}else if(v&&v.playbackRate===16){v.playbackRate=1;if(!wasMuted){v.muted=false;}}"
         let s13 = "},500);"
-        let s14 = "window.addEventListener('message',function(e){var d=e.data;if(!d||!d.cmd)return;var v=document.querySelector('video');if(d.cmd==='click'){var ce=document.elementFromPoint(d.x,d.y);if(ce){var bt=ce.closest('button,[role=button],a,li,input,label,[tabindex]')||ce;bt.click();}return;}if(d.cmd==='pause'){document.querySelectorAll('video,audio').forEach(function(m){m.pause();});return;}if(d.cmd==='hover'){var t=v||document.body;t.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:100,clientY:100}));if(window.PointerEvent)t.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:100,clientY:100}));var pl=document.querySelector('.jwplayer,.plyr,.video-js');if(pl){pl.classList.remove('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.add('jw-flag-user-active','vjs-user-active');clearTimeout(window.__ifHide);window.__ifHide=setTimeout(function(){pl.classList.add('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.remove('jw-flag-user-active','vjs-user-active');},2500);}return;}if(!v)return;if(d.cmd==='toggle'){v.paused?v.play():v.pause();}else if(d.cmd==='skip'&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+d.val),v.duration);}else if(d.cmd==='seek'&&isFinite(v.duration)){v.currentTime=v.duration*d.val;}});"
+        let s14 = "window.addEventListener('message',function(e){var d=e.data;if(!d||!d.cmd)return;var v=document.querySelector('video');if(d.cmd==='click'){var ce=document.elementFromPoint(d.x,d.y);if(ce){var bt=ce.closest('button,[role=button],a,li,input,label,[tabindex]')||ce;bt.click();}return;}if(d.cmd==='pause'){document.querySelectorAll('video,audio').forEach(function(m){m.pause();});return;}if(d.cmd==='down'){var de=document.elementFromPoint(d.x,d.y)||document.body;window.__dragEl=de;de.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:d.x,clientY:d.y,pointerId:1}));de.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:d.x,clientY:d.y,button:0,buttons:1}));return;}if(d.cmd==='move'){var me=window.__dragEl||document.elementFromPoint(d.x,d.y)||document.body;me.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:d.x,clientY:d.y,pointerId:1}));me.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:d.x,clientY:d.y,button:0,buttons:1}));return;}if(d.cmd==='up'){var ue=window.__dragEl||document.elementFromPoint(d.x,d.y)||document.body;ue.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,clientX:d.x,clientY:d.y,pointerId:1}));ue.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:d.x,clientY:d.y,button:0,buttons:0}));window.__dragEl=null;return;}if(d.cmd==='hover'){var t=v||document.body;t.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:100,clientY:100}));if(window.PointerEvent)t.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:100,clientY:100}));var pl=document.querySelector('.jwplayer,.plyr,.video-js');if(pl){pl.classList.remove('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.add('jw-flag-user-active','vjs-user-active');clearTimeout(window.__ifHide);window.__ifHide=setTimeout(function(){pl.classList.add('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.remove('jw-flag-user-active','vjs-user-active');},2500);}return;}if(!v)return;if(d.cmd==='toggle'){v.paused?v.play():v.pause();}else if(d.cmd==='skip'&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+d.val),v.duration);}else if(d.cmd==='seek'&&isFinite(v.duration)){v.currentTime=v.duration*d.val;}});"
         let script = WKUserScript(
             source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
             injectionTime: .atDocumentEnd,
@@ -82,6 +82,32 @@ final class WebEngine {
             }
         }
     }
+
+
+
+static func dragTo(point: CGPoint, in webView: WKWebView?) {
+    // Dispatches pointermove and mousemove events to the dragged element or target point.
+    let j1 = "var el=window.__dragEl||document.elementFromPoint(\(Double(point.x)),\(Double(point.y)))||document.body;"
+    // ...iframe and event dispatch logic...
+    webView?.evaluateJavaScript(j1 + "...", completionHandler: nil)
+}
+
+static func dragTo(point: CGPoint, in webView: WKWebView?) {
+    // Dispatches pointermove and mousemove events to the dragged element or target point.
+    let j1 = "var el=window.__dragEl||document.elementFromPoint(\(Double(point.x)),\(Double(point.y)))||document.body;"
+    // ...iframe and event dispatch logic...
+    webView?.evaluateJavaScript(j1 + "...", completionHandler: nil)
+}
+
+    static func mouseUpAt(point: CGPoint, in webView: WKWebView?) {
+    // Dispatches pointerup and mouseup events, then clears the stored drag element.
+    let j1 = "var el=window.__dragEl||document.elementFromPoint(\(Double(point.x)),\(Double(point.y)))||document.body;"
+    // ...iframe and event dispatch logic...
+    webView?.evaluateJavaScript(j1 + "...", completionHandler: nil)
+}
+
+
+    
     static func hoverAt(point: CGPoint, in webView: WKWebView?) {
     let x = Double(point.x)
     let y = Double(point.y)
