@@ -23,7 +23,7 @@ final class WebEngine {
         let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
         let s12 = "if(ad&&v){if(!v.muted){wasMuted=false;v.muted=true;}if(v.playbackRate!==16){v.playbackRate=16;}}else if(v&&v.playbackRate===16){v.playbackRate=1;if(!wasMuted){v.muted=false;}}"
         let s13 = "},500);"
-        let s14 = "window.addEventListener('message',function(e){var d=e.data;if(!d||!d.cmd)return;var v=document.querySelector('video');if(!v)return;if(d.cmd==='toggle'){v.paused?v.play():v.pause();}else if(d.cmd==='skip'&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+d.val),v.duration);}else if(d.cmd==='seek'&&isFinite(v.duration)){v.currentTime=v.duration*d.val;}});"
+        let s14 = "window.addEventListener('message',function(e){var d=e.data;if(!d||!d.cmd)return;var v=document.querySelector('video');if(d.cmd==='hover'){var t=v||document.body;t.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:100,clientY:100}));if(window.PointerEvent)t.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:100,clientY:100}));var pl=document.querySelector('.jwplayer,.plyr,.video-js');if(pl){pl.classList.remove('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.add('jw-flag-user-active','vjs-user-active');clearTimeout(window.__ifHide);window.__ifHide=setTimeout(function(){pl.classList.add('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.remove('jw-flag-user-active','vjs-user-active');},2500);}return;}if(!v)return;if(d.cmd==='toggle'){v.paused?v.play():v.pause();}else if(d.cmd==='skip'&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+d.val),v.duration);}else if(d.cmd==='seek'&&isFinite(v.duration)){v.currentTime=v.duration*d.val;}});"
         let script = WKUserScript(
             source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
             injectionTime: .atDocumentEnd,
@@ -89,9 +89,11 @@ final class WebEngine {
     let h2 = "var p=document.getElementById('movie_player');if(p){onVid?p.classList.remove('ytp-autohide'):p.classList.add('ytp-autohide');}"
     let h3 = "var ov=document.getElementById('player-control-overlay');if(ov){if(onVid){ov.classList.add('fadein');ov.style.opacity='1';}else{ov.classList.remove('fadein');ov.style.opacity='0';}}"
         let h3b = "if(el){el.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:\(x),clientY:\(y)}));if(window.PointerEvent)el.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:\(x),clientY:\(y)}));}"
+        let h3c = "if(el&&el.tagName==='IFRAME'){try{el.contentWindow.postMessage({cmd:'hover'},'*');}catch(e){}}"
     let h4 = "clearTimeout(window.__ytHideT);if(onVid){window.__ytHideT=setTimeout(function(){"
     let h5 = "if(p)p.classList.add('ytp-autohide');if(ov){ov.classList.remove('fadein');ov.style.opacity='0';}},2500);}"
-    webView?.evaluateJavaScript(h1 + h2 + h3 + h3b + h4 + h5, completionHandler: nil)
+   webView?.evaluateJavaScript(h1 + h2 + h3 + h3b + h3c + h4 + h5, completionHandler: nil)
+
 }
 
     
