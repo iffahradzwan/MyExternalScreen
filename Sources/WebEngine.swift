@@ -85,26 +85,30 @@ final class WebEngine {
 
 
 
-static func mouseDownAt(point: CGPoint, in webView: WKWebView?) {
-    // Dispatches pointerdown and mousedown events to the element at the specified point, handling iframes via postMessage.
-    let j1 = "var el=document.elementFromPoint(\(Double(point.x)),\(Double(point.y)))||document.body;"
-    // ...iframe and event dispatch logic...
-    webView?.evaluateJavaScript(j1 + "...", completionHandler: nil)
-}
+    private static func sendDrag(cmd: String, pe: String, me: String, point: CGPoint, in webView: WKWebView?) {
+        let x = Double(point.x)
+        let y = Double(point.y)
+        let d1 = "(function(){var x=\(x),y=\(y),el=document.elementFromPoint(x,y)||document.body;"
+        let d2 = "if(el&&el.tagName==='IFRAME'){var r=el.getBoundingClientRect();try{el.contentWindow.postMessage({cmd:'\(cmd)',x:x-r.left,y:y-r.top},'*');}catch(e){}return;}"
+        let d3 = "if('\(cmd)'==='down')window.__dragEl=el;var t=window.__dragEl||el;"
+        let d4 = "if(window.PointerEvent)t.dispatchEvent(new PointerEvent('\(pe)',{bubbles:true,clientX:x,clientY:y,pointerId:1}));"
+        let d5 = "t.dispatchEvent(new MouseEvent('\(me)',{bubbles:true,clientX:x,clientY:y,button:0,buttons:'\(cmd)'==='up'?0:1}));"
+        let d6 = "if('\(cmd)'==='up')window.__dragEl=null;})();"
+        webView?.evaluateJavaScript(d1 + d2 + d3 + d4 + d5 + d6, completionHandler: nil)
+    }
 
-static func dragTo(point: CGPoint, in webView: WKWebView?) {
-    // Dispatches pointermove and mousemove events to the dragged element or target point.
-    let j1 = "var el=window.__dragEl||document.elementFromPoint(\(Double(point.x)),\(Double(point.y)))||document.body;"
-    // ...iframe and event dispatch logic...
-    webView?.evaluateJavaScript(j1 + "...", completionHandler: nil)
-}
+    static func mouseDownAt(point: CGPoint, in webView: WKWebView?) {
+        sendDrag(cmd: "down", pe: "pointerdown", me: "mousedown", point: point, in: webView)
+    }
+
+    static func dragTo(point: CGPoint, in webView: WKWebView?) {
+        sendDrag(cmd: "move", pe: "pointermove", me: "mousemove", point: point, in: webView)
+    }
 
     static func mouseUpAt(point: CGPoint, in webView: WKWebView?) {
-    // Dispatches pointerup and mouseup events, then clears the stored drag element.
-    let j1 = "var el=window.__dragEl||document.elementFromPoint(\(Double(point.x)),\(Double(point.y)))||document.body;"
-    // ...iframe and event dispatch logic...
-    webView?.evaluateJavaScript(j1 + "...", completionHandler: nil)
-}
+        sendDrag(cmd: "up", pe: "pointerup", me: "mouseup", point: point, in: webView)
+    }
+
 
 
     
