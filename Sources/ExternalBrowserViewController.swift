@@ -513,6 +513,19 @@ func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigatio
     }
     decisionHandler(.allow)
 }
+
+func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    if webView === chromeWebView, let current = webView.url?.absoluteString, current.hasPrefix("http") {
+        if chromeTabURLs.indices.contains(activeChromeTab) {
+            chromeTabURLs[activeChromeTab] = current
+            let pageTitle = (webView.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let host = webView.url?.host?.replacingOccurrences(of: "www.", with: "") ?? "Google"
+            chromeTabTitles[activeChromeTab] = pageTitle.isEmpty ? host : pageTitle
+            rebuildMonitorChromeTabs()
+        }
+    }
+}
+
 // MARK: - Floating Dock & Arrow Cursor
 private func setupFloatingDock() {
 dockView.layer.cornerRadius = 22
