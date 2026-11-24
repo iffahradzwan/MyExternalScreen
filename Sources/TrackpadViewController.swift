@@ -131,7 +131,20 @@ trackpadView.addSubview(padWatermark)
         trackpadView.addGestureRecognizer(pinch)
         trackpadView.addGestureRecognizer(doubleTap)
         trackpadView.addGestureRecognizer(singleTap)
-        
+
+       let swipeRight = UISwipeGestureRecognizer(target: self, action: #selector(goBack))
+swipeRight.direction = .right
+swipeRight.numberOfTouchesRequired = 2
+scrollPan.require(toFail: swipeRight)
+
+let swipeLeft = UISwipeGestureRecognizer(target: self, action: #selector(goForward))
+swipeLeft.direction = .left
+swipeLeft.numberOfTouchesRequired = 2
+scrollPan.require(toFail: swipeLeft)
+
+trackpadView.addGestureRecognizer(swipeRight)
+trackpadView.addGestureRecognizer(swipeLeft)
+
         startVideoProgressTimer()
     }
     override func viewDidLayoutSubviews() {
