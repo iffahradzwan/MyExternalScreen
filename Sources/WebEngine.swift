@@ -44,9 +44,8 @@ final class WebEngine {
     }
     
     static func clickAt(point: CGPoint, in webView: WKWebView, onFullscreen: @escaping () -> Void, onInput: @escaping (String) -> Void) {
-        let scale = max(0.1, webView.scrollView.zoomScale)
-        let px = String(Double(point.x / scale))
-        let py = String(Double(point.y / scale))
+       let px = String(Double(point.x))
+        let py = String(Double(point.y))
         let txtSel = "textarea,input:not([type=hidden]):not([type=file]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio])"
         
         let c1 = "(function(){var doc=document;var x=" + px + ";var y=" + py + ";"
@@ -116,15 +115,25 @@ final class WebEngine {
     static func skipVideo(seconds: Double, in webView: WKWebView?) {
         let sec = String(seconds)
         let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-        let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
+        // In skipVideo, seekVideo, and getVideoProgress:
+let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+
+// In togglePlayPause:
+let p2 = " var v=vids.find(function(x){return x.duration>0;})||vids[0];"
+
         let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}})();"
+        
         webView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
     }
     
     static func seekVideo(fraction: Double, in webView: WKWebView?) {
         let frac = String(fraction)
-        let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-        let k2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids;"
+        let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"// In skipVideo, seekVideo, and getVideoProgress:
+let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+
+// In togglePlayPause:
+let p2 = " var v=vids.find(function(x){return x.duration>0;})||vids[0];"
+
         let k3 = "if(v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*" + frac + ";}})();"
         webView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
     }
