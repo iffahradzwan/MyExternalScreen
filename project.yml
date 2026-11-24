@@ -8,6 +8,7 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - Sources
+      - Resources
     info:
       path: Info.plist
       properties:
@@ -21,3 +22,4 @@ targets:
             UIWindowSceneSessionRoleExternalDisplayNonInteractive:
               - UISceneConfigurationName: External Configuration
                 UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).ExternalSceneDelegate
+
