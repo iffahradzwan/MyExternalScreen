@@ -1,7 +1,7 @@
 import UIKit
 import WebKit
 
-class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
+class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     var youtubeWebView: WKWebView!
     var netflixWebView: WKWebView!
     var chromeWebView: WKWebView!
@@ -64,6 +64,10 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate {
         youtubeWebView = WebEngine.makeWebView(delegate: self)
         netflixWebView = WebEngine.makeWebView(delegate: self)
         chromeWebView = WebEngine.makeWebView(delegate: self)
+        youtubeWebView.uiDelegate = self
+        netflixWebView.uiDelegate = self
+        chromeWebView.uiDelegate = self
+
         
         setupAppWindow()
         setupTopMenuBar()
@@ -500,10 +504,6 @@ func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigatio
         decisionHandler(.allow)
         return
     }
-    if navigationAction.targetFrame == nil {
-        decisionHandler(.cancel)
-        return
-    }
     if let currentHost = webView.url?.host?.lowercased(),
        navigationAction.navigationType == .other,
        !targetHost.hasSuffix(currentHost),
@@ -512,6 +512,17 @@ func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigatio
         return
     }
     decisionHandler(.allow)
+}
+
+func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+    if let url = navigationAction.request.url, url.absoluteString.hasPrefix("http") {
+        if currentMode == .chrome {
+            addChromeTab(urlString: url.absoluteString)
+        } else {
+            webView.load(URLRequest(url: url))
+        }
+    }
+    return nil
 }
 
 func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
