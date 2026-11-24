@@ -52,13 +52,31 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
     private var isVideoZoomedFull = false
     private var didSetupViews = false
     private var statusTimer: Timer?
+    private func saveSession() {
+    UserDefaults.standard.set(chromeTabURLs, forKey: "savedChromeURLs")
+    UserDefaults.standard.set(chromeTabTitles, forKey: "savedChromeTitles")
+    UserDefaults.standard.set(activeChromeTab, forKey: "savedChromeIndex")
+    if let yt = youtubeWebView?.url?.absoluteString, yt.hasPrefix("http") {
+        UserDefaults.standard.set(yt, forKey: "savedYouTubeURL")
+    }
+}
+
+private func restoreSession() {
+    if let urls = UserDefaults.standard.stringArray(forKey: "savedChromeURLs"), !urls.isEmpty {
+        chromeTabURLs = urls
+        chromeTabTitles = UserDefaults.standard.stringArray(forKey: "savedChromeTitles") ?? urls.map { _ in "Tab" }
+        activeChromeTab = min(UserDefaults.standard.integer(forKey: "savedChromeIndex"), urls.count - 1)
+    }
+}
+
     var onInputSelected: ((String) -> Void)?
     
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
         UIDevice.current.isBatteryMonitoringEnabled = true
-        
+        restoreSession()
+
         setupDesktopEnvironment()
         
         youtubeWebView = WebEngine.makeWebView(delegate: self)
@@ -437,6 +455,7 @@ windowContentHolder.addSubview(chromeWebView)
 }
 @objc private func closeActiveWindow() {
     pauseAllMediaOnBackground()
+    saveSession()
     closedModes.insert(currentMode)
     UIView.animate(withDuration: 0.18, animations: {
         self.appWindowContainer.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
@@ -528,8 +547,11 @@ func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             let host = webView.url?.host?.replacingOccurrences(of: "www.", with: "") ?? "Google"
             chromeTabTitles[activeChromeTab] = pageTitle.isEmpty ? host : pageTitle
             rebuildMonitorChromeTabs()
+            saveSession()
+
         }
     }
+    if webView === youtubeWebView { saveSession() }
 }
 
 // MARK: - Floating Dock & Arrow Cursor
@@ -651,7 +673,8 @@ updateDockIndicators()
 view.setNeedsLayout()
 view.layoutIfNeeded()
 if youtubeWebView.url == nil {
-    loadFresh("https://youtube.com", into: youtubeWebView)
+    let savedYT = UserDefaults.standard.string(forKey: "savedYouTubeURL") ?? "https://youtube.com"
+loadFresh(savedYT, into: youtubeWebView)
 
 }
 }
