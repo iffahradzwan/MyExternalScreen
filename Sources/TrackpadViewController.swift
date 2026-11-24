@@ -212,7 +212,14 @@ trackpadView.addSubview(padWatermark)
     @objc private func goBack() { externalVC?.activeWebView?.goBack() }
     @objc private func goForward() { externalVC?.activeWebView?.goForward() }
     @objc private func reloadPage() { externalVC?.activeWebView?.reload() }
-    @objc private func openYouTube() { urlField.text = ""; externalVC?.launchYouTube() }
+    @objc private func openYouTube() {
+    urlField.text = ""
+    externalVC?.launchYouTube()
+    if let url = URL(string: "https://youtube.com") {
+        externalVC?.youtubeWebView.load(URLRequest(url: url))
+    }
+}
+
     @objc private func openChrome() { urlField.text = ""; externalVC?.launchChromeDefault() }
     @objc private func openNetflix() { urlField.text = ""; externalVC?.launchNetflix() }
     @objc private func toggleDock() { externalVC?.toggleDock() }
@@ -251,9 +258,18 @@ target = comps.url?.absoluteString ?? "https://google.com"
 
 }
 
-if self.externalVC?.currentMode == .youtube, let url = URL(string: target) {
-self.externalVC?.youtubeWebView.load(URLRequest(url: url))
-} else if self.externalVC?.currentMode == .netflix, let url = URL(string: target) {
+if self.externalVC?.currentMode == .youtube {
+    if text.hasPrefix("http://") || text.hasPrefix("https://"), let url = URL(string: target) {
+        self.externalVC?.youtubeWebView.load(URLRequest(url: url))
+    } else {
+        var ytComps = URLComponents(string: "https://youtube.com")!
+        ytComps.queryItems = [URLQueryItem(name: "search_query", value: text)]
+        if let ytURL = ytComps.url {
+            self.externalVC?.youtubeWebView.load(URLRequest(url: ytURL))
+        }
+    }
+}
+ else if self.externalVC?.currentMode == .netflix, let url = URL(string: target) {
 self.externalVC?.netflixWebView.load(URLRequest(url: url))
 } else {
 self.externalVC?.openInChrome(urlString: target)
@@ -291,12 +307,16 @@ gesture.setTranslation(.zero, in: trackpadView)
 ext.moveCursor(dx: delta.x * 2.2, dy: delta.y * 2.2)
 }
 @objc private func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
-    guard let webView = externalVC?.activeWebView else { return }
+    guard let ext = externalVC, let webView = ext.activeWebView else { return }
     let delta = gesture.translation(in: trackpadView)
     gesture.setTranslation(.zero, in: trackpadView)
     let dy = -Double(delta.y) * 2.5
-    webView.evaluateJavaScript("window.scrollBy(0, \(dy));", completionHandler: nil)
+    let tip = CGPoint(x: ext.cursorView.frame.minX + 4, y: ext.cursorView.frame.minY + 3)
+    let pt = ext.view.convert(tip, to: webView)
+    let js = "var el=document.elementFromPoint(\(pt.x),\(pt.y));while(el&&el!==document.body){var s=getComputedStyle(el);if((s.overflowY==='auto'||s.overflowY==='scroll')&&el.scrollHeight>el.clientHeight){el.scrollTop+=\(dy);break;}el=el.parentElement;}if(!el||el===document.body){window.scrollBy(0,\(dy));}"
+    webView.evaluateJavaScript(js, completionHandler: nil)
 }
+
 
 @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
 guard let scrollView = externalVC?.activeWebView?.scrollView else { return }
