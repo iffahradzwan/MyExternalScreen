@@ -56,7 +56,7 @@ final class WebEngine {
         let c6 = "if(!inp&&!el.closest('button,[role=button],a,[role=option],li')){var box=el.closest('[role=search],[role=combobox],.RNNXgb,.ytSearchboxComponentInputBox');if(box){inp=box.querySelector('" + txtSel + "');}}"
         let c7 = "if(inp){window.__lastFocusedInput=inp;inp.focus();return {isInput:true,val:(inp.value||'')};}"
         let c8 = "window.__lastFocusedInput=null;"
-        let c9 = "if(el.closest('.ytp-fullscreen-button')){return {isInput:false,hitFullscreen:true};}"
+        let c9 = " if(el.closest('.ytp-fullscreen-button,.fullscreen-icon,[aria-label*=\"full screen\" i],[aria-label*=\"fullscreen\" i]')){return {isInput:false,hitFullscreen:true};}"
         let c10 = "var t=el.closest('a,button,[role=button],[role=option],[role=tab],[role=link],[role=menuitem],[role=menuitemradio],[role=menuitemcheckbox],.ytp-menuitem,li,select,label,yt-formatted-string,ytd-thumbnail')||el;"
         let c11 = "if(t.focus){t.focus();}"
         let c12 = "var po={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:1,pointerType:'mouse',isPrimary:true,button:0,buttons:1};"
@@ -80,6 +80,13 @@ final class WebEngine {
             }
         }
     }
+    static func hoverAt(point: CGPoint, in webView: WKWebView?) {
+    let x = Double(point.x)
+    let y = Double(point.y)
+    let js = "var el=document.elementFromPoint(\(x),\(y));if(el){el.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:\(x),clientY:\(y)}));}var p=document.getElementById('movie_player');if(p)p.classList.remove('ytp-autohide');"
+    webView?.evaluateJavaScript(js, completionHandler: nil)
+}
+
     
     static func typeText(_ text: String, submit: Bool, into webView: WKWebView?) {
         let base64 = Data(text.utf8).base64EncodedString()
