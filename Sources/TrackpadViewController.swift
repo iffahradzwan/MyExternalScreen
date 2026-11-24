@@ -291,13 +291,13 @@ gesture.setTranslation(.zero, in: trackpadView)
 ext.moveCursor(dx: delta.x * 2.2, dy: delta.y * 2.2)
 }
 @objc private func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
-guard let webView = externalVC?.activeWebView else { return }
-let delta = gesture.translation(in: trackpadView)
-gesture.setTranslation(.zero, in: trackpadView)
-let maxScrollY = max(0, webView.scrollView.contentSize.height - webView.bounds.height)
-let newY = min(maxScrollY, max(0, webView.scrollView.contentOffset.y - delta.y * 2.0))
-webView.scrollView.setContentOffset(CGPoint(x: 0, y: newY), animated: false)
+    guard let webView = externalVC?.activeWebView else { return }
+    let delta = gesture.translation(in: trackpadView)
+    gesture.setTranslation(.zero, in: trackpadView)
+    let dy = -Double(delta.y) * 2.5
+    webView.evaluateJavaScript("window.scrollBy(0, \(dy));", completionHandler: nil)
 }
+
 @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
 guard let scrollView = externalVC?.activeWebView?.scrollView else { return }
 if gesture.state == .changed {
