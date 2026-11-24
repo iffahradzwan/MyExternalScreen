@@ -109,22 +109,24 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
         let dockH: CGFloat = 68
         dockView.frame = CGRect(x: (w - dockW) / 2, y: h - dockH - 14, width: dockW, height: dockH)
         
-        let bottomClearance: CGFloat = dockView.isHidden ? 12 : (dockH + 26)
-       if isWindowFullscreen || isVideoZoomedFull {
+   let bottomClearance: CGFloat = dockView.isHidden ? 12 : (dockH + 26)
+if isWindowFullscreen || isVideoZoomedFull {
     appWindowContainer.frame = isVideoZoomedFull ? view.bounds : CGRect(x: 0, y: menuH, width: w, height: h - menuH)
     appWindowContainer.layer.cornerRadius = 0
+    appWindowContainer.layer.borderWidth = isVideoZoomedFull ? 0 : 1
 } else {
+    let sideMargin: CGFloat = max(24, w * 0.04)
+    let topMargin: CGFloat = menuH + 14
+    appWindowContainer.frame = CGRect(
+        x: sideMargin,
+        y: topMargin,
+        width: w - (sideMargin * 2),
+        height: max(200, h - topMargin - bottomClearance)
+    )
+    appWindowContainer.layer.cornerRadius = 16
+    appWindowContainer.layer.borderWidth = 1
+}
 
-            let sideMargin: CGFloat = max(24, w * 0.04)
-            let topMargin: CGFloat = menuH + 14
-            appWindowContainer.frame = CGRect(
-                x: sideMargin,
-                y: topMargin,
-                width: w - (sideMargin * 2),
-                height: max(200, h - topMargin - bottomClearance)
-            )
-            appWindowContainer.layer.cornerRadius = 16
-        }
         
         let titleBarH: CGFloat = isVideoZoomedFull ? 0 : ((currentMode == .chrome) ? 42 : 34)
         windowTitleBar.frame = CGRect(x: 0, y: 0, width: appWindowContainer.bounds.width, height: titleBarH)
