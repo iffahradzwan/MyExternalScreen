@@ -23,7 +23,7 @@ final class WebEngine {
         let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
         let s12 = "if(ad&&v){if(!v.muted){wasMuted=false;v.muted=true;}if(v.playbackRate!==16){v.playbackRate=16;}}else if(v&&v.playbackRate===16){v.playbackRate=1;if(!wasMuted){v.muted=false;}}"
         let s13 = "},500);"
-        let s14 = "window.addEventListener('message',function(e){var d=e.data;if(!d||!d.cmd)return;var v=document.querySelector('video');if(d.cmd==='hover'){var t=v||document.body;t.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:100,clientY:100}));if(window.PointerEvent)t.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:100,clientY:100}));var pl=document.querySelector('.jwplayer,.plyr,.video-js');if(pl){pl.classList.remove('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.add('jw-flag-user-active','vjs-user-active');clearTimeout(window.__ifHide);window.__ifHide=setTimeout(function(){pl.classList.add('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.remove('jw-flag-user-active','vjs-user-active');},2500);}return;}if(!v)return;if(d.cmd==='toggle'){v.paused?v.play():v.pause();}else if(d.cmd==='skip'&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+d.val),v.duration);}else if(d.cmd==='seek'&&isFinite(v.duration)){v.currentTime=v.duration*d.val;}});"
+        let s14 = "window.addEventListener('message',function(e){var d=e.data;if(!d||!d.cmd)return;var v=document.querySelector('video');if(d.cmd==='click'){var ce=document.elementFromPoint(d.x,d.y);if(ce){var bt=ce.closest('button,[role=button],a,li,input,label,[tabindex]')||ce;bt.click();}return;}if(d.cmd==='pause'){document.querySelectorAll('video,audio').forEach(function(m){m.pause();});return;}if(d.cmd==='hover'){var t=v||document.body;t.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:100,clientY:100}));if(window.PointerEvent)t.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:100,clientY:100}));var pl=document.querySelector('.jwplayer,.plyr,.video-js');if(pl){pl.classList.remove('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.add('jw-flag-user-active','vjs-user-active');clearTimeout(window.__ifHide);window.__ifHide=setTimeout(function(){pl.classList.add('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.remove('jw-flag-user-active','vjs-user-active');},2500);}return;}if(!v)return;if(d.cmd==='toggle'){v.paused?v.play():v.pause();}else if(d.cmd==='skip'&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+d.val),v.duration);}else if(d.cmd==='seek'&&isFinite(v.duration)){v.currentTime=v.duration*d.val;}});"
         let script = WKUserScript(
             source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
             injectionTime: .atDocumentEnd,
@@ -41,7 +41,7 @@ final class WebEngine {
     }
     
     static func pauseAllMedia(in webViews: [WKWebView?]) {
-        let js = "document.querySelectorAll('video,audio').forEach(function(m){m.pause();});"
+        let js = "document.querySelectorAll('video,audio').forEach(function(m){m.pause();});document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({cmd:'pause'},'*');}catch(e){}});"
         webViews.forEach { $0?.evaluateJavaScript(js, completionHandler: nil) }
     }
     
@@ -52,7 +52,7 @@ final class WebEngine {
         
         let c1 = "(function(){var doc=document;var x=" + px + ";var y=" + py + ";"
         let c2 = "var el=doc.elementFromPoint(x,y);"
-        let c3 = "while(el&&el.tagName==='IFRAME'){try{var r=el.getBoundingClientRect();x-=r.left;y-=r.top;doc=el.contentDocument;if(!doc)break;el=doc.elementFromPoint(x,y);}catch(e){break;}}"
+       let c3 = "while(el&&el.tagName==='IFRAME'){...try{el.contentWindow.postMessage({cmd:'click',x:x,y:y},'*');}catch(e2){}return {isInput:false,hitFullscreen:false};}}"
         let c4 = "if(!el)return null;"
         let c5 = "var inp=el.matches('" + txtSel + "')?el:el.closest('" + txtSel + "');"
         let c6 = "if(!inp&&!el.closest('button,[role=button],a,[role=option],li')){var box=el.closest('[role=search],[role=combobox],.RNNXgb,.ytSearchboxComponentInputBox');if(box){inp=box.querySelector('" + txtSel + "');}}"
