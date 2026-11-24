@@ -84,7 +84,9 @@ final class WebEngine {
     static func hoverAt(point: CGPoint, in webView: WKWebView?) {
     let x = Double(point.x)
     let y = Double(point.y)
-   let js = "var el=document.elementFromPoint(\(x),\(y));if(el){el.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:\(x),clientY:\(y)}));}var p=document.getElementById('movie_player');if(p){p.classList.remove('ytp-autohide');p.classList.add('ytp-user-active');}var ov=document.getElementById('player-control-overlay');if(ov){ov.classList.add('fadein');ov.style.opacity='1';}"
+   let h1 = "var el=document.elementFromPoint(\(x),\(y));var onVid=el&&el.closest('#movie_player,.html5-video-player,video,#player-control-overlay');"
+let h2 = "var p=document.getElementById('movie_player');if(p){onVid?p.classList.remove('ytp-autohide'):p.classList.add('ytp-autohide');}"
+let h3 = "var ov=document.getElementById('player-control-overlay');if(ov){if(onVid){ov.classList.add('fadein');ov.style.opacity='1';}else{ov.classList.remove('fadein');ov.style.opacity='0';}}"
     webView?.evaluateJavaScript(js, completionHandler: nil)
 }
 
@@ -165,7 +167,7 @@ let f1 = "(function(){document.querySelectorAll('video').forEach(function(v){if(
 let f2 = "var style=document.getElementById('custom-fs-style');"
 let f3 = "if(" + fullFlag + "){"
 let f4 = "if(!style){style=document.createElement('style');style.id='custom-fs-style';"
-let f5 = "style.textContent='body{overflow:hidden!important;}#movie_player,.html5-video-player,video{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:999999!important;background:#000!important;object-fit:cover!important;}ytd-masthead,#secondary,#below,#guide,ytm-mobile-topbar-renderer,ytm-engagement-panel-section-list-renderer{display:none!important;}';"
+let f5 = "style.textContent='body{overflow:hidden!important;}#movie_player,.html5-video-player,video{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:999999!important;background:#000!important;object-fit:cover!important;}#player-control-overlay,.ytp-chrome-bottom{z-index:1000000!important;}ytd-masthead,#secondary,#below,#guide,ytm-mobile-topbar-renderer,ytm-engagement-panel-section-list-renderer{display:none!important;}';"
 let f6 = "document.head.appendChild(style);}"
 let f7 = "}else{if(style){style.remove();}}window.dispatchEvent(new Event('resize'));})();"
 webView?.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6 + f7, completionHandler: nil)
