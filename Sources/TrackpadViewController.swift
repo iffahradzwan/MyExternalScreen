@@ -262,7 +262,7 @@ if self.externalVC?.currentMode == .youtube {
     if text.hasPrefix("http://") || text.hasPrefix("https://"), let url = URL(string: target) {
         self.externalVC?.youtubeWebView.load(URLRequest(url: url))
     } else {
-        var ytComps = URLComponents(string: "https://youtube.com")!
+        var ytComps = URLComponents(string: "https://youtube.com" + "/results")!
         ytComps.queryItems = [URLQueryItem(name: "search_query", value: text)]
         if let ytURL = ytComps.url {
             self.externalVC?.youtubeWebView.load(URLRequest(url: ytURL))
