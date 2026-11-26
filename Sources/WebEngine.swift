@@ -279,15 +279,15 @@ final class WebEngine {
                             v.paused ? v.play() : v.pause();
                             } else if (d.cmd === 'skip' && isFinite(v.duration)) {
                             v.currentTime = Math.min(Math.max(0, v.currentTime + d.val), v.duration);
-                            } else if (d.cmd === 'seek' && isFinite(v.duration)) {
-                            v.currentTime = v.duration * d.val;
-                            }
-                            });
-                            """
-                            let script = WKUserScript(
-                            source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
-                            injectionTime: .atDocumentEnd,
-                            forMainFrameOnly: false
+                                       } else if (d.cmd === 'seek' && isFinite(v.duration)) {
+                v.currentTime = v.duration * d.val;
+            }
+        });
+"""
+        let script = WKUserScript(
+            source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
                             )
                             config.userContentController.addUserScript(script)
                             let wv = WKWebView(frame: .zero, configuration: config)
