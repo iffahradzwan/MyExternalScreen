@@ -2,9 +2,14 @@ import UIKit
 import WebKit
 
 class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
-    var youtubeWebView: WKWebView!
+       var youtubeWebView: WKWebView!
     var netflixWebView: WKWebView!
-    var chromeWebView: WKWebView!
+    var chromeWebViews: [WKWebView] = []
+    var chromeWebView: WKWebView? {
+        guard chromeWebViews.indices.contains(activeChromeTab) else { return chromeWebViews.first }
+        return chromeWebViews[activeChromeTab]
+    }
+
     
     var chromeTabURLs: [String] = ["https://google.com"]
     var chromeTabTitles: [String] = ["Google"]
@@ -14,7 +19,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
     var currentMode: AppMode = .desktop
     var isWindowFullscreen: Bool = false
     
-    var activeWebView: WKWebView? {
+     var activeWebView: WKWebView? {
         switch currentMode {
         case .desktop: return nil
         case .youtube: return youtubeWebView
@@ -22,6 +27,7 @@ class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKU
         case .chrome: return chromeWebView
         }
     }
+
     
     // Core UI Layers
     let cursorView = UIView()
@@ -79,10 +85,15 @@ private func restoreSession() {
 
         setupDesktopEnvironment()
         
-     
-youtubeWebView = WebEngine.makeWebView(delegate: self, isDesktop: true)
-netflixWebView = WebEngine.makeWebView(delegate: self)
-chromeWebView = WebEngine.makeWebView(delegate: self,isDesktop: true)
+
+        youtubeWebView = WebEngine.makeWebView(delegate: self, isDesktop: true)
+        netflixWebView = WebEngine.makeWebView(delegate: self)
+        chromeWebViews = chromeTabURLs.map { _ in
+            let wv = WebEngine.makeWebView(delegate: self, isDesktop: true)
+            wv.uiDelegate = self
+            return wv
+        }
+
 
         youtubeWebView.uiDelegate = self
         netflixWebView.uiDelegate = self
@@ -159,10 +170,11 @@ if isWindowFullscreen || isVideoZoomedFull {
             width: appWindowContainer.bounds.width,
             height: max(100, appWindowContainer.bounds.height - titleBarH)
         )
-        
+
         youtubeWebView.frame = windowContentHolder.bounds
         netflixWebView.frame = windowContentHolder.bounds
-        chromeWebView.frame = windowContentHolder.bounds
+        chromeWebViews.forEach { $0.frame = windowContentHolder.bounds }
+
         
         if cursorView.center == .zero {
             cursorView.center = CGPoint(x: w / 2, y: h / 2)
@@ -178,9 +190,10 @@ if isWindowFullscreen || isVideoZoomedFull {
         }
     }
     
-    @objc private func pauseAllMediaOnBackground() {
-        WebEngine.pauseAllMedia(in: [youtubeWebView, netflixWebView, chromeWebView])
+       @objc private func pauseAllMediaOnBackground() {
+        WebEngine.pauseAllMedia(in: [youtubeWebView, netflixWebView] + chromeWebViews)
     }
+
     
     // MARK: - Desktop Wallpaper, Icons & Widgets
     private func setupDesktopEnvironment() {
@@ -453,25 +466,33 @@ windowTitleBar.contentView.addSubview(chromeTabScroll)
 appWindowContainer.addSubview(windowContentHolder)
 windowContentHolder.addSubview(youtubeWebView)
 windowContentHolder.addSubview(netflixWebView)
-windowContentHolder.addSubview(chromeWebView)
+chromeWebViews.forEach { windowContentHolder.addSubview($0) }
+
 }
-    @objc private func closeActiveWindow() {
-        pauseAllMediaOnBackground()
-        saveSession()
-        if let activeWV = activeWebView, let blankURL = URL(string: "about:blank") {
+  @objc private func closeActiveWindow() {
+    saveSession()
+    if let blankURL = URL(string: "about:blank") {
+        if currentMode == .chrome {
+            chromeWebViews.forEach {
+                $0.stopLoading()
+                $0.load(URLRequest(url: blankURL))
+            }
+        } else if let activeWV = activeWebView {
             activeWV.stopLoading()
             activeWV.load(URLRequest(url: blankURL))
         }
-        closedModes.insert(currentMode)
-        UIView.animate(withDuration: 0.18, animations: {
-            self.appWindowContainer.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
-            self.appWindowContainer.alpha = 0
-        }) { _ in
-            self.appWindowContainer.transform = .identity
-            self.appWindowContainer.alpha = 1
-            self.showDesktop()
-        }
     }
+    closedModes.insert(currentMode)
+    UIView.animate(withDuration: 0.18, animations: {
+        self.appWindowContainer.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
+        self.appWindowContainer.alpha = 0
+    }) { _ in
+        self.appWindowContainer.transform = .identity
+        self.appWindowContainer.alpha = 1
+        self.showDesktop()
+    }
+}
+
 
 
 @objc private func minimizeActiveWindow() { showDesktop() }
@@ -664,86 +685,90 @@ view.bringSubviewToFront(cursorView)
 }
 
     
-@objc func launchYouTube() {
-pauseAllMediaOnBackground()
-currentMode = .youtube
-isVideoZoomedFull = false
-menuAppTitleLabel.text = "YouTube"
-windowTitleLabel.text = "YouTube"
-windowTitleLabel.isHidden = false
-chromeTabScroll.isHidden = true
-desktopView.isHidden = true
-appWindowContainer.isHidden = false
-animateWindowOpen(for: .youtube)
-youtubeWebView.isHidden = false
-netflixWebView.isHidden = true
-chromeWebView.isHidden = true
-updateDockIndicators()
-view.setNeedsLayout()
-view.layoutIfNeeded()
-if youtubeWebView.url == nil || youtubeWebView.url?.absoluteString == "about:blank" {
-    let savedYT = UserDefaults.standard.string(forKey: "savedYouTubeURL") ?? "https://youtube.com"
-    loadFresh(savedYT, into: youtubeWebView)
-}
+    @objc func launchYouTube() {
+        currentMode = .youtube
+        isVideoZoomedFull = false
+        menuAppTitleLabel.text = "YouTube"
+        windowTitleLabel.text = "YouTube"
+        windowTitleLabel.isHidden = false
+        chromeTabScroll.isHidden = true
+        desktopView.isHidden = true
+        appWindowContainer.isHidden = false
+        animateWindowOpen(for: .youtube)
+        youtubeWebView.isHidden = false
+        netflixWebView.isHidden = true
+        chromeWebViews.forEach { $0.isHidden = true }
+        updateDockIndicators()
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        if youtubeWebView.url == nil || youtubeWebView.url?.absoluteString == "about:blank" {
+            let savedYT = UserDefaults.standard.string(forKey: "savedYouTubeURL") ?? "https://youtube.com"
+            loadFresh(savedYT, into: youtubeWebView)
+        }
+    }
 
-}
-    
-@objc func launchNetflix() {
-pauseAllMediaOnBackground()
-currentMode = .netflix
-isVideoZoomedFull = false
-menuAppTitleLabel.text = "Netflix"
-windowTitleLabel.text = "Netflix"
-windowTitleLabel.isHidden = false
-chromeTabScroll.isHidden = true
-desktopView.isHidden = true
-appWindowContainer.isHidden = false
-animateWindowOpen(for: .netflix)
-youtubeWebView.isHidden = true
-netflixWebView.isHidden = false
-chromeWebView.isHidden = true
-updateDockIndicators()
-view.setNeedsLayout()
-view.layoutIfNeeded()
-if netflixWebView.url == nil || netflixWebView.url?.absoluteString == "about:blank" {
-    loadFresh("https://netflix.com", into: netflixWebView)
-}
 
-}
+    @objc func launchNetflix() {
+        currentMode = .netflix
+        isVideoZoomedFull = false
+        menuAppTitleLabel.text = "Netflix"
+        windowTitleLabel.text = "Netflix"
+        windowTitleLabel.isHidden = false
+        chromeTabScroll.isHidden = true
+        desktopView.isHidden = true
+        appWindowContainer.isHidden = false
+        animateWindowOpen(for: .netflix)
+        youtubeWebView.isHidden = true
+        netflixWebView.isHidden = false
+        chromeWebViews.forEach { $0.isHidden = true }
+        updateDockIndicators()
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        if netflixWebView.url == nil || netflixWebView.url?.absoluteString == "about:blank" {
+            loadFresh("https://netflix.com", into: netflixWebView)
+        }
+    }
+
 @objc func launchChromeDefault() { openInChrome(urlString: nil) }
-func openInChrome(urlString: String?) {
-pauseAllMediaOnBackground()
-currentMode = .chrome
-isVideoZoomedFull = false
-menuAppTitleLabel.text = "Google Chrome"
-windowTitleLabel.isHidden = true
-chromeTabScroll.isHidden = false
-desktopView.isHidden = true
-appWindowContainer.isHidden = false
-animateWindowOpen(for: .chrome)
-youtubeWebView.isHidden = true
-netflixWebView.isHidden = true
-chromeWebView.isHidden = false
-updateDockIndicators()
-view.setNeedsLayout()
-view.layoutIfNeeded()
-if chromeTabURLs.isEmpty {
-chromeTabURLs = ["https://google.com"]
-chromeTabTitles = ["Google"]
-activeChromeTab = 0
-}
-if let target = urlString {
-chromeTabURLs[activeChromeTab] = target
-rebuildMonitorChromeTabs()
-loadFresh(target, into: chromeWebView)
-} else {
-rebuildMonitorChromeTabs()
-if chromeWebView.url == nil || chromeWebView.url?.absoluteString == "about:blank" {
-    loadFresh(chromeTabURLs[activeChromeTab], into: chromeWebView)
-}
+    func openInChrome(urlString: String?) {
+        currentMode = .chrome
+        isVideoZoomedFull = false
+        menuAppTitleLabel.text = "Google Chrome"
+        windowTitleLabel.isHidden = true
+        chromeTabScroll.isHidden = false
+        desktopView.isHidden = true
+        appWindowContainer.isHidden = false
+        animateWindowOpen(for: .chrome)
+        youtubeWebView.isHidden = true
+        netflixWebView.isHidden = true
+        if chromeWebViews.isEmpty {
+            let wv = WebEngine.makeWebView(delegate: self, isDesktop: true)
+            wv.uiDelegate = self
+            wv.frame = windowContentHolder.bounds
+            windowContentHolder.addSubview(wv)
+            chromeWebViews = [wv]
+            chromeTabURLs = ["https://google.com"]
+            chromeTabTitles = ["Google"]
+            activeChromeTab = 0
+        }
+        for (i, wv) in chromeWebViews.enumerated() {
+            wv.isHidden = (i != activeChromeTab)
+        }
+        updateDockIndicators()
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        if let target = urlString, let activeWV = chromeWebView {
+            chromeTabURLs[activeChromeTab] = target
+            rebuildMonitorChromeTabs()
+            loadFresh(target, into: activeWV)
+        } else {
+            rebuildMonitorChromeTabs()
+            if let activeWV = chromeWebView, (activeWV.url == nil || activeWV.url?.absoluteString == "about:blank") {
+                loadFresh(chromeTabURLs[activeChromeTab], into: activeWV)
+            }
+        }
+    }
 
-}
-}
 func addChromeTab(urlString: String = "https://google.com") {
     chromeTabURLs.append(urlString)
     chromeTabTitles.append("Loading...")
@@ -774,18 +799,33 @@ activeChromeTab = index
 openInChrome(urlString: chromeTabURLs[index])
 }
 func closeChromeTab(index: Int) {
-guard chromeTabURLs.indices.contains(index) else { return }
-chromeTabURLs.remove(at: index)
-chromeTabTitles.remove(at: index)
-if chromeTabURLs.isEmpty {
-chromeTabURLs = ["https://google.com"]
-chromeTabTitles = ["Google"]
-activeChromeTab = 0
-} else {
-activeChromeTab = min(index, chromeTabURLs.count - 1)
+    guard chromeTabURLs.indices.contains(index) else { return }
+    if chromeWebViews.indices.contains(index) {
+        let closingWV = chromeWebViews.remove(at: index)
+        closingWV.stopLoading()
+        if let blank = URL(string: "about:blank") {
+            closingWV.load(URLRequest(url: blank))
+        }
+        closingWV.removeFromSuperview()
+    }
+    chromeTabURLs.remove(at: index)
+    chromeTabTitles.remove(at: index)
+    if chromeTabURLs.isEmpty {
+        let freshWV = WebEngine.makeWebView(delegate: self, isDesktop: true)
+        freshWV.uiDelegate = self
+        freshWV.frame = windowContentHolder.bounds
+        windowContentHolder.addSubview(freshWV)
+        chromeWebViews = [freshWV]
+        chromeTabURLs = ["https://google.com"]
+        chromeTabTitles = ["Google"]
+        activeChromeTab = 0
+        openInChrome(urlString: "https://google.com")
+    } else {
+        activeChromeTab = min(index, chromeTabURLs.count - 1)
+        openInChrome(urlString: nil)
+    }
 }
-openInChrome(urlString: chromeTabURLs[activeChromeTab])
-}
+
 func toggleDock() {
 dockView.isHidden.toggle()
 view.setNeedsLayout()
@@ -893,3 +933,14 @@ func toggleFullscreen() {
 }
 
 }
+    func addChromeTab(urlString: String = "https://google.com") {
+        let newWV = WebEngine.makeWebView(delegate: self, isDesktop: true)
+        newWV.uiDelegate = self
+        newWV.frame = windowContentHolder.bounds
+        windowContentHolder.addSubview(newWV)
+        chromeWebViews.append(newWV)
+        chromeTabURLs.append(urlString)
+        chromeTabTitles.append("Loading...")
+        activeChromeTab = chromeWebViews.count - 1
+        openInChrome(urlString: urlString)
+    }
