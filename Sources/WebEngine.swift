@@ -121,7 +121,7 @@ final class WebEngine {
                             } else if (st) {
                             st.remove();
                             }
-                            window.parent.postMessage({ tok: '(msgToken)', cmd: 'iframe-fs', val: window.__isIfFs }, '*');
+                            window.parent.postMessage({ tok: '\(msgToken)', cmd: 'iframe-fs', val: window.__isIfFs }, '*');
                             return;
                             }
                             var bt = ce.closest('button,[role=button],a,li,input,label,[tabindex]') || ce;
