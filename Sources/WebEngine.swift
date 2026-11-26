@@ -2,14 +2,88 @@ import UIKit
 import WebKit
 
 final class WebEngine {
-        private static let msgToken = UUID().uuidString
-    static func makeWebView(delegate: WKNavigationDelegate) -> WKWebView {
+    private static let msgToken = UUID().uuidString
+
+    static func makeWebView(delegate: WKNavigationDelegate, isDesktop: Bool = false) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.allowsAirPlayForMediaPlayback = true
         config.allowsPictureInPictureMediaPlayback = false
         config.mediaTypesRequiringUserActionForPlayback = []
-        
+
+        // 1. EARLY AD-STRIPPING INTERCEPTOR (.atDocumentStart)
+        let earlyAdBlockJS = """
+        (function() {
+            const cleanAdData = (obj) => {
+                if (!obj || typeof obj !== 'object') return obj;
+                delete obj.adPlacements;
+                delete obj.playerAds;
+                delete obj.adSlots;
+                return obj;
+            };
+
+            const origParse = JSON.parse;
+            JSON.parse = function(text, reviver) {
+                const data = origParse.apply(this, arguments);
+                return cleanAdData(data);
+            };
+
+            const origFetch = window.fetch;
+            window.fetch = async function(...args) {
+                const response = await origFetch.apply(this, args);
+                const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+                if (url.includes('/youtubei/v1/player')) {
+                    const clone = response.clone();
+                    try {
+                        const json = await clone.json();
+                        cleanAdData(json);
+                        return new Response(JSON.stringify(json), {
+                            status: response.status,
+                            statusText: response.statusText,
+                            headers: response.headers
+                        });
+                    } catch (e) {
+                        return response;
+                    }
+                }
+                return response;
+            };
+        })();
+        """
+        config.userContentController.addUserScript(
+            WKUserScript(source: earlyAdBlockJS, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        )
+
+        // 2. NETWORK-LEVEL CONTENT BLOCKER
+        let blockRules = """
+        [
+            {
+                "trigger": {
+                    "url-filter": ".*(doubleclick\\\\.net|googlesyndication\\\\.com|googleadservices\\\\.com|youtube\\\\.com/pagead/|youtube\\\\.com/api/stats/ads).*"
+                },
+                "action": { "type": "block" }
+            },
+            {
+                "trigger": { "url-filter": ".*youtube\\\\.com.*" },
+                "action": {
+                    "type": "css-display-none",
+                    "selector": "ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer, ytd-banner-promo-renderer, #masthead-ad, .ytp-ad-module, .ytp-ad-overlay-container"
+                }
+            }
+        ]
+        """
+        WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: "PeekabooAdBlocker",
+            encodedContentRuleList: blockRules
+        ) { ruleList, _ in
+            if let ruleList = ruleList {
+                DispatchQueue.main.async {
+                    config.userContentController.add(ruleList)
+                }
+            }
+        }
+
+        // 3. YOUR ORIGINAL SAFETY OVERRIDES + UPGRADED FALLBACK SKIPPER (.atDocumentEnd)
         let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){};"
         let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){};"
         let s3 = "Element.prototype.requestFullscreen=function(){return Promise.resolve();};"
@@ -18,13 +92,13 @@ final class WebEngine {
         let s5 = "var st=document.createElement('style');st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container{display:none!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
         let s6 = "var wasMuted=false;setInterval(function(){"
         let s7 = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
-        let s8 = "var s=document.querySelector('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text');"
-        let s9 = "if(s){s.click();}"
+        let s8 = "var skipBtns=document.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text,.ytp-ad-overlay-close-button');"
+        let s9 = "skipBtns.forEach(function(s){if(window.PointerEvent){s.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));s.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));}s.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));s.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));s.click();});"
         let s10 = "var ad=document.querySelector('.ad-showing,.ad-interrupting');"
         let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
-        let s12 = "if(ad&&v){if(!v.muted){wasMuted=false;v.muted=true;}if(v.playbackRate!==16){v.playbackRate=16;}}else if(v&&v.playbackRate===16){v.playbackRate=1;if(!wasMuted){v.muted=false;}}"
-        let s13 = "},500);"
-               let s14a = "window.addEventListener('message',function(e){var d=e.data;if(!d||d.tok!=='\(msgToken)'||!d.cmd)return;var v=document.querySelector('video');if(d.cmd==='click'){var ce=document.elementFromPoint(d.x,d.y);if(ce){var bt=ce.closest('button,[role=button],a,li,input,label,[tabindex]')||ce;var po={view:window,bubbles:true,cancelable:true,clientX:d.x,clientY:d.y,pointerId:1,pointerType:'mouse',isPrimary:true,button:0,buttons:1};var mo={view:window,bubbles:true,cancelable:true,clientX:d.x,clientY:d.y,button:0,buttons:1};if(window.PointerEvent){bt.dispatchEvent(new PointerEvent('pointerdown',po));}bt.dispatchEvent(new MouseEvent('mousedown',mo));if(window.PointerEvent){bt.dispatchEvent(new PointerEvent('pointerup',po));}bt.dispatchEvent(new MouseEvent('mouseup',mo));bt.click();}return;}if(d.cmd==='pause'){document.querySelectorAll('video,audio').forEach(function(m){m.pause();});return;}if(d.cmd==='fs'){var st=document.getElementById('if-fs');if(d.val){if(!st){st=document.createElement('style');st.id='if-fs';st.textContent='video{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,[class*=\"control\" i]{z-index:999999!important;}';document.head.appendChild(st);}}else if(st){st.remove();}return;}"
+        let s12 = "if(ad&&v){if(!v.muted){wasMuted=false;v.muted=true;}if(isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration;}if(v.playbackRate!==16){v.playbackRate=16;}}else if(v&&v.playbackRate===16){v.playbackRate=1;if(!wasMuted){v.muted=false;}}"
+        let s13 = "},300);"
+        let s14a = "window.addEventListener('message',function(e){var d=e.data;if(!d||d.tok!=='\(msgToken)'||!d.cmd)return;var v=document.querySelector('video');if(d.cmd==='click'){var ce=document.elementFromPoint(d.x,d.y);if(ce){var bt=ce.closest('button,[role=button],a,li,input,label,[tabindex]')||ce;var po={view:window,bubbles:true,cancelable:true,clientX:d.x,clientY:d.y,pointerId:1,pointerType:'mouse',isPrimary:true,button:0,buttons:1};var mo={view:window,bubbles:true,cancelable:true,clientX:d.x,clientY:d.y,button:0,buttons:1};if(window.PointerEvent){bt.dispatchEvent(new PointerEvent('pointerdown',po));}bt.dispatchEvent(new MouseEvent('mousedown',mo));if(window.PointerEvent){bt.dispatchEvent(new PointerEvent('pointerup',po));}bt.dispatchEvent(new MouseEvent('mouseup',mo));bt.click();}return;}if(d.cmd==='pause'){document.querySelectorAll('video,audio').forEach(function(m){m.pause();});return;}if(d.cmd==='fs'){var st=document.getElementById('if-fs');if(d.val){if(!st){st=document.createElement('style');st.id='if-fs';st.textContent='video{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,[class*=\"control\" i]{z-index:999999!important;}';document.head.appendChild(st);}}else if(st){st.remove();}return;}"
         let s14 = s14a + "if(d.cmd==='down'){var de=document.elementFromPoint(d.x,d.y)||document.body;window.__dragEl=de;de.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:d.x,clientY:d.y,pointerId:1}));de.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:d.x,clientY:d.y,button:0,buttons:1}));return;}if(d.cmd==='move'){var me=window.__dragEl||document.elementFromPoint(d.x,d.y)||document.body;me.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:d.x,clientY:d.y,pointerId:1}));me.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:d.x,clientY:d.y,button:0,buttons:1}));return;}if(d.cmd==='up'){var ue=window.__dragEl||document.elementFromPoint(d.x,d.y)||document.body;ue.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,clientX:d.x,clientY:d.y,pointerId:1}));ue.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:d.x,clientY:d.y,button:0,buttons:0}));window.__dragEl=null;return;}if(d.cmd==='hover'){var t=v||document.body;t.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:100,clientY:100}));if(window.PointerEvent)t.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:100,clientY:100}));var pl=document.querySelector('.jwplayer,.plyr,.video-js');if(pl){pl.classList.remove('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.add('jw-flag-user-active','vjs-user-active');clearTimeout(window.__ifHide);window.__ifHide=setTimeout(function(){pl.classList.add('jw-flag-user-inactive','plyr--hide-controls','vjs-user-inactive');pl.classList.remove('jw-flag-user-active','vjs-user-active');},2500);}return;}if(!v)return;if(d.cmd==='toggle'){v.paused?v.play():v.pause();}else if(d.cmd==='skip'&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+d.val),v.duration);}else if(d.cmd==='seek'&&isFinite(v.duration)){v.currentTime=v.duration*d.val;}});"
 
         let script = WKUserScript(
@@ -33,10 +107,12 @@ final class WebEngine {
             forMainFrameOnly: false
         )
         config.userContentController.addUserScript(script)
-        
+
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = delegate
-        wv.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+        wv.customUserAgent = isDesktop
+            ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
+            : "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
         wv.backgroundColor = .black
         wv.isOpaque = true
         wv.scrollView.contentInsetAdjustmentBehavior = .never
