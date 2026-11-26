@@ -570,19 +570,21 @@ func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewCon
 }
 
 func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    if webView === chromeWebView, let current = webView.url?.absoluteString, current.hasPrefix("http") {
-        if chromeTabURLs.indices.contains(activeChromeTab) {
-            chromeTabURLs[activeChromeTab] = current
+    if let idx = chromeWebViews.firstIndex(of: webView),
+       let current = webView.url?.absoluteString, current.hasPrefix("http") {
+        if chromeTabURLs.indices.contains(idx) {
+            chromeTabURLs[idx] = current
             let pageTitle = (webView.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let host = webView.url?.host?.replacingOccurrences(of: "www.", with: "") ?? "Google"
-            chromeTabTitles[activeChromeTab] = pageTitle.isEmpty ? host : pageTitle
+            chromeTabTitles[idx] = pageTitle.isEmpty ? host : pageTitle
             rebuildMonitorChromeTabs()
             saveSession()
-
         }
     }
     if webView === youtubeWebView { saveSession() }
 }
+
+       
 
 // MARK: - Floating Dock & Arrow Cursor
 private func setupFloatingDock() {
@@ -770,34 +772,23 @@ view.bringSubviewToFront(cursorView)
     }
 
 func addChromeTab(urlString: String = "https://google.com") {
+    let newWV = WebEngine.makeWebView(delegate: self, isDesktop: true)
+    newWV.uiDelegate = self
+    newWV.frame = windowContentHolder.bounds
+    windowContentHolder.addSubview(newWV)
+    chromeWebViews.append(newWV)
     chromeTabURLs.append(urlString)
     chromeTabTitles.append("Loading...")
-    activeChromeTab = chromeTabURLs.count - 1
-    currentMode = .chrome
-    isVideoZoomedFull = false
-    menuAppTitleLabel.text = "Google Chrome"
-    windowTitleLabel.isHidden = true
-    chromeTabScroll.isHidden = false
-    desktopView.isHidden = true
-    appWindowContainer.isHidden = false
-    youtubeWebView.isHidden = true
-    netflixWebView.isHidden = true
-    chromeWebView.isHidden = false
-    updateDockIndicators()
-    rebuildMonitorChromeTabs()
-    view.setNeedsLayout()
-    view.layoutIfNeeded()
-    if let url = URL(string: urlString) {
-        chromeWebView.stopLoading()
-        chromeWebView.load(URLRequest(url: url))
-    }
+    activeChromeTab = chromeWebViews.count - 1
+    openInChrome(urlString: urlString)
 }
 
 func switchChromeTab(index: Int) {
-guard chromeTabURLs.indices.contains(index) else { return }
-activeChromeTab = index
-openInChrome(urlString: chromeTabURLs[index])
+    guard chromeTabURLs.indices.contains(index) else { return }
+    activeChromeTab = index
+    openInChrome(urlString: nil)
 }
+
 func closeChromeTab(index: Int) {
     guard chromeTabURLs.indices.contains(index) else { return }
     if chromeWebViews.indices.contains(index) {
