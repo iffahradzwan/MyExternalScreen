@@ -4,306 +4,302 @@ import WebKit
 final class WebEngine {
     private static let msgToken = UUID().uuidString
 
-    static func makeWebView(delegate: WKNavigationDelegate, isDesktop: Bool = false) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        if let handler = delegate as? WKScriptMessageHandler {
-    config.userContentController.add(handler, name: "fullscreenToggle")
-}
+  static func makeWebView(delegate: WKNavigationDelegate, isDesktop: Bool = false) -> WKWebView {
+    let config = WKWebViewConfiguration()
+    if let handler = delegate as? WKScriptMessageHandler {
+        config.userContentController.add(handler, name: "fullscreenToggle")
+    }
+    config.allowsInlineMediaPlayback = true
+    config.allowsAirPlayForMediaPlayback = true
+    config.allowsPictureInPictureMediaPlayback = false
+    config.mediaTypesRequiringUserActionForPlayback = []
 
-        config.allowsInlineMediaPlayback = true
-        config.allowsAirPlayForMediaPlayback = true
-        config.allowsPictureInPictureMediaPlayback = false
-        config.mediaTypesRequiringUserActionForPlayback = []
-        
-        // 1. EARLY AD-STRIPPING & INSTANT PLAYSINLINE (.atDocumentStart)
-        let earlyAdBlockJS = """
-        (function() {
-            const origCreate = document.createElement;
-            document.createElement = function(tagName, options) {
-                const el = origCreate.call(this, tagName, options);
-                if (typeof tagName === 'string' && tagName.toLowerCase() === 'video') {
-                    el.setAttribute('playsinline', '');
-                    el.setAttribute('webkit-playsinline', '');
-                    el.playsInline = true;
-                }
-                return el;
-            };
+    // 1. EARLY AD-STRIPPING, VISIBILITY & PLAYSINLINE (.atDocumentStart)
+    let earlyAdBlockJS = """
+    (function() {
+        // Keep YouTube playing when window is minimized (isHidden = true)
+        try {
+            Object.defineProperty(document, 'hidden', { get: () => false });
+            Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+            document.addEventListener('visibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
+        } catch (e) {}
 
-                        const cleanAdData = (obj) => {
-                if (!obj || typeof obj !== 'object') return obj;
-                delete obj.adPlacements;
-                delete obj.playerAds;
-                delete obj.adSlots;
-                delete obj.adBreakHeartbeatParams;
-                return obj;
-            };
-
-            const origParse = JSON.parse;
-            JSON.parse = function(text, reviver) {
-                const data = origParse.apply(this, arguments);
-                return cleanAdData(data);
-            };
-
-            const origFetch = window.fetch;
-            window.fetch = async function(...args) {
-                const response = await origFetch.apply(this, args);
-                const req = args[0];
-                const url = typeof req === 'string' ? req : (req && req.url ? req.url : '');
-                if (url.includes('/youtubei/v1/player') || url.includes('/youtubei/v1/next')) {
-                    const clone = response.clone();
-                    try {
-                        const json = await clone.json();
-                        cleanAdData(json);
-                        return new Response(JSON.stringify(json), {
-                            status: response.status,
-                            statusText: response.statusText,
-                            headers: response.headers
-                        });
-                    } catch (e) {
-                        return response;
-                    }
-                }
-                return response;
-            };
-
-        })();
-        """
-
-
-        config.userContentController.addUserScript(
-            WKUserScript(source: earlyAdBlockJS, injectionTime: .atDocumentStart, forMainFrameOnly: false)
-        )
-
-        // 2. NETWORK-LEVEL CONTENT BLOCKER
-        let blockRules = """
-        [
-            {
-                "trigger": {
-                    "url-filter": ".*(doubleclick\\\\.net|googlesyndication\\\\.com|googleadservices\\\\.com|youtube\\\\.com/pagead/|youtube\\\\.com/api/stats/ads).*"
-                },
-                "action": { "type": "block" }
-            },
-            {
-                "trigger": { "url-filter": ".*youtube\\\\.com.*" },
-                "action": {
-                    "type": "css-display-none",
-                    "selector": "ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer, ytd-banner-promo-renderer, #masthead-ad, .ytp-ad-module, .ytp-ad-overlay-container"
-                }
+        // Instant playsinline at 0ms
+        const origCreate = document.createElement;
+        document.createElement = function(tagName, options) {
+            const el = origCreate.call(this, tagName, options);
+            if (typeof tagName === 'string' && tagName.toLowerCase() === 'video') {
+                el.setAttribute('playsinline', '');
+                el.setAttribute('webkit-playsinline', '');
+                el.playsInline = true;
             }
-        ]
-        """
-        WKContentRuleListStore.default().compileContentRuleList(
-            forIdentifier: "PeekabooAdBlocker",
-            encodedContentRuleList: blockRules
-        ) { ruleList, _ in
-            if let ruleList = ruleList {
-                DispatchQueue.main.async {
-                    config.userContentController.add(ruleList)
-                }
+            return el;
+        };
+
+        const cleanAdData = (obj) => {
+            if (!obj || typeof obj !== 'object') return obj;
+            delete obj.adPlacements;
+            delete obj.playerAds;
+            delete obj.adSlots;
+            delete obj.adBreakHeartbeatParams;
+            return obj;
+        };
+
+        const origParse = JSON.parse;
+        JSON.parse = function(text, reviver) {
+            const data = origParse.apply(this, arguments);
+            return cleanAdData(data);
+        };
+
+        const origRespJson = Response.prototype.json;
+        Response.prototype.json = async function() {
+            const data = await origRespJson.apply(this, arguments);
+            return cleanAdData(data);
+        };
+
+        const origXHROpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url) {
+            this.__reqUrl = typeof url === 'string' ? url : '';
+            return origXHROpen.apply(this, arguments);
+        };
+        const origXHRSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send = function() {
+            if (this.__reqUrl && (this.__reqUrl.includes('/youtubei/v1/player') || this.__reqUrl.includes('/youtubei/v1/next'))) {
+                this.addEventListener('readystatechange', function() {
+                    if (this.readyState === 4 && this.responseText) {
+                        try {
+                            const cleaned = JSON.stringify(cleanAdData(origParse(this.responseText)));
+                            Object.defineProperty(this, 'responseText', { get: () => cleaned });
+                            Object.defineProperty(this, 'response', { get: () => cleaned });
+                        } catch (e) {}
+                    }
+                });
+            }
+            return origXHRSend.apply(this, arguments);
+        };
+    })();
+    """
+    config.userContentController.addUserScript(
+        WKUserScript(source: earlyAdBlockJS, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+    )
+
+    // 2. NETWORK-LEVEL CONTENT BLOCKER
+    let blockRules = """
+    [
+        {
+            "trigger": {
+                "url-filter": ".*(doubleclick\\\\.net|googlesyndication\\\\.com|googleadservices\\\\.com|youtube\\\\.com/pagead/|youtube\\\\.com/api/stats/ads).*"
+            },
+            "action": { "type": "block" }
+        },
+        {
+            "trigger": { "url-filter": ".*youtube\\\\.com.*" },
+            "action": {
+                "type": "css-display-none",
+                "selector": "ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer, ytd-banner-promo-renderer, #masthead-ad, .ytp-ad-module, .ytp-ad-overlay-container"
             }
         }
-
-        // 3. YOUR ORIGINAL SAFETY OVERRIDES + UPGRADED FALLBACK SKIPPER (.atDocumentEnd)
-        let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){};"
-        let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){};"
-        let s3 = "Element.prototype.requestFullscreen=function(){return Promise.resolve();};"
-        let s4 = "Element.prototype.webkitRequestFullscreen=function(){};"
-        let s4b = "window.open=function(){return null;};"
-        let s5 = "var st=document.createElement('style');st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container{display:none!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
-        let s6 = "window.__userMuted=false;document.addEventListener('click',function(e){if(e.target&&e.target.closest('.ytp-mute-button')){var v=document.querySelector('video');if(v)window.__userMuted=!v.muted;}},true);setInterval(function(){"
-        let s7 = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
-        let s8 = "var skipBtns=document.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text,.ytp-ad-overlay-close-button');"
-        let s9 = "skipBtns.forEach(function(s){if(window.PointerEvent){s.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));s.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));}s.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));s.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));s.click();});"
-        let s10 = "var ad=document.querySelector('.ad-showing,.ad-interrupting');"
-        let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
-        let s12 = "if(ad&&v){v.muted=true;if(isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration;}if(v.playbackRate!==16){v.playbackRate=16;}if(v.paused)v.play();}else if(v){if(v.playbackRate===16){v.playbackRate=1;if(v.paused)v.play();}if(!window.__userMuted&&v.muted){v.muted=false;v.volume=1;}}if(location.pathname.indexOf('/shorts/')===0){if(window.__lastShort!==location.pathname){window.__lastShort=location.pathname;setTimeout(function(){window.dispatchEvent(new Event('resize'));},150);}}else{window.__lastShort=null;}"
-        let s13 = "},300);"
-        let s14 = """
-        window.addEventListener('message', function(e) {
-            var d = e.data;
-            if (!d || d.tok !== '\(msgToken)' || !d.cmd) return;
-            var v = document.querySelector('video');
-
-            if (d.cmd === 'iframe-fs') {
-                document.querySelectorAll('iframe').forEach(function(f) {
-                    if (f.contentWindow === e.source) {
-                        var pst = document.getElementById('if-parent-fs');
-                        if (d.val) {
-                            if (!pst) {
-                                pst = document.createElement('style');
-                                pst.id = 'if-parent-fs';
-                                pst.textContent = 'html,body{margin:0!important;padding:0!important;overflow:hidden!important;}iframe[data-if-fs="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:999999!important;background:#000!important;}';
-                                document.head.appendChild(pst);
-                            }
-                            f.setAttribute('data-if-fs', '1');
-                        } else {
-                            f.removeAttribute('data-if-fs');
-                            if (pst) pst.remove();
-                        }
-                    }
-                });
-                    if (window.top === window && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fullscreenToggle) {
-                    window.webkit.messageHandlers.fullscreenToggle.postMessage(Boolean(d.val));
-                }
-                return;
-
+    ]
+    """
+    WKContentRuleListStore.default().compileContentRuleList(
+        forIdentifier: "PeekabooAdBlocker",
+        encodedContentRuleList: blockRules
+    ) { ruleList, _ in
+        if let ruleList = ruleList {
+            DispatchQueue.main.async {
+                config.userContentController.add(ruleList)
             }
-
-            if (d.cmd === 'click') {
-                var ce = document.elementFromPoint(d.x, d.y);
-                if (ce) {
-                    var r = ce.getBoundingClientRect();
-                    var inCorner = (r.right > window.innerWidth - 90 && r.bottom > window.innerHeight - 90);
-                    var fsBtn = ce.closest('.jw-icon-fullscreen,.plyr__control[data-plyr="fullscreen"],.vjs-fullscreen-control,.art-icon-fullscreen,[aria-label*="full" i],[title*="full" i],[class*="fullscreen" i]') || (inCorner ? ce.closest('button,[role=button],svg') : null);
-                    if (fsBtn && window.top !== window) {
-                        window.__isIfFs = !window.__isIfFs;
-                        var st = document.getElementById('if-fs');
-                        if (window.__isIfFs) {
-                            if (!st) {
-                                st = document.createElement('style');
-                                st.id = 'if-fs';
-                                st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
-                                document.head.appendChild(st);
-                            }
-                        } else if (st) {
-                            st.remove();
-                        }
-                        window.parent.postMessage({ tok: '\(msgToken)', cmd: 'iframe-fs', val: window.__isIfFs }, '*');
-                        return;
-                    }
-                    var bt = ce.closest('button,[role=button],a,li,input,label,[tabindex]') || ce;
-                    var po = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 };
-                    var mo = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 };
-                    if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerdown', po));
-                    bt.dispatchEvent(new MouseEvent('mousedown', mo));
-                    if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerup', po));
-                    bt.dispatchEvent(new MouseEvent('mouseup', mo));
-                    bt.click();
-                }
-                return;
-            }
-
-            if (d.cmd === 'pause') {
-                document.querySelectorAll('video,audio').forEach(function(m) { m.pause(); });
-                document.querySelectorAll('iframe').forEach(function(f) {
-                    try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
-                });
-                return;
-            }
-
-            if (d.cmd === 'fs') {
-                var st = document.getElementById('if-fs');
-                if (d.val) {
-                    if (!st) {
-                        st = document.createElement('style');
-                        st.id = 'if-fs';
-                        st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
-                        document.head.appendChild(st);
-                    }
-                } else if (st) {
-                    st.remove();
-                }
-                document.querySelectorAll('iframe').forEach(function(f) {
-                    try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
-                });
-                return;
-            }
-
-            if (d.cmd === 'down') {
-                var de = document.elementFromPoint(d.x, d.y) || document.body;
-                window.__dragEl = de;
-                de.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
-                de.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
-                return;
-            }
-
-            if (d.cmd === 'move') {
-                var me = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
-                me.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
-                me.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
-                return;
-            }
-
-            if (d.cmd === 'up') {
-                var ue = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
-                ue.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
-                ue.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 0 }));
-                window.__dragEl = null;
-                return;
-            }
-
-            if (d.cmd === 'hover') {
-                var hx = d.x || 100, hy = d.y || 100;
-                var he = document.elementFromPoint(hx, hy);
-                if (window.__lastHoverEl && window.__lastHoverEl !== he) {
-                    window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he }));
-                    window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he }));
-                }
-                               window.__lastHoverEl = he;
-                var onProg = he && he.closest('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]');
-                if (!onProg) {
-                    document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control').forEach(function(p) {
-                        p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy }));
-                        p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy }));
-                    });
-                }
-                if (he && he.tagName === 'IFRAME') {
-                    var hr = he.getBoundingClientRect();
-                    try { he.contentWindow.postMessage({ tok: '\(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
-                    return;
-                }
-
-                }
-                var t = he || v || document.body;
-                t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: hx, clientY: hy }));
-                if (window.PointerEvent) t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hx, clientY: hy }));
-                var pl = document.querySelector('.jwplayer,.plyr,.video-js,.art-video-player');
-                if (pl) {
-                    pl.classList.remove('jw-flag-user-inactive', 'plyr--hide-controls', 'vjs-user-inactive', 'art-control-hide');
-                    pl.classList.add('jw-flag-user-active', 'vjs-user-active', 'art-hover');
-                    clearTimeout(window.__ifHide);
-                    window.__ifHide = setTimeout(function() {
-                        pl.classList.add('jw-flag-user-inactive', 'plyr--hide-controls', 'vjs-user-inactive');
-                        pl.classList.remove('jw-flag-user-active', 'vjs-user-active', 'art-hover');
-                    }, 2500);
-                }
-                return;
-            }
-
-            document.querySelectorAll('iframe').forEach(function(f) {
-                try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
-            });
-
-            if (!v) return;
-            if (d.cmd === 'toggle') {
-                v.paused ? v.play() : v.pause();
-            } else if (d.cmd === 'skip' && isFinite(v.duration)) {
-                v.currentTime = Math.min(Math.max(0, v.currentTime + d.val), v.duration);
-            } else if (d.cmd === 'seek' && isFinite(v.duration)) {
-                v.currentTime = v.duration * d.val;
-            }
-        });
-        """
-
-
-        let script = WKUserScript(
-            source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: false
-        )
-        config.userContentController.addUserScript(script)
-
-        let wv = WKWebView(frame: .zero, configuration: config)
-        wv.navigationDelegate = delegate
-        wv.customUserAgent = isDesktop
-            ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
-            : "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
-        wv.backgroundColor = .black
-        wv.isOpaque = true
-        wv.scrollView.contentInsetAdjustmentBehavior = .never
-        return wv
+        }
     }
-    
+
+    // 3. SAFETY OVERRIDES, FALLBACK SKIPPER, UNMUTER & IFRAME CONTROLS (.atDocumentEnd)
+    let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){};"
+    let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){};"
+    let s3 = "Element.prototype.requestFullscreen=function(){return Promise.resolve();};"
+    let s4 = "Element.prototype.webkitRequestFullscreen=function(){};"
+    let s4b = "window.open=function(){return null;};"
+    let s5 = "var st=document.createElement('style');st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container{display:none!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
+    let s6 = "window.__userMuted=false;document.addEventListener('click',function(e){if(e.target&&e.target.closest('.ytp-mute-button')){var v=document.querySelector('video');if(v)window.__userMuted=!v.muted;}},true);setInterval(function(){"
+    let s7 = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
+    let s8 = "var skipBtns=document.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text,.ytp-ad-overlay-close-button');"
+    let s9 = "skipBtns.forEach(function(s){if(window.PointerEvent){s.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));s.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));}s.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));s.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));s.click();});"
+    let s10 = "var ad=document.querySelector('.ad-showing,.ad-interrupting');"
+    let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
+    let s12 = "if(ad&&v){v.muted=true;if(isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration;}if(v.playbackRate!==16){v.playbackRate=16;}if(v.paused)v.play();}else if(v){if(v.playbackRate===16){v.playbackRate=1;if(v.paused)v.play();}if(!window.__userMuted&&v.muted){v.muted=false;v.volume=1;}}if(location.pathname.indexOf('/shorts/')===0){if(window.__lastShort!==location.pathname){window.__lastShort=location.pathname;setTimeout(function(){window.dispatchEvent(new Event('resize'));},150);}}else{window.__lastShort=null;}"
+    let s13 = "},300);"
+    let s14 = """
+    window.addEventListener('message', function(e) {
+        var d = e.data;
+        if (!d || d.tok !== '\(msgToken)' || !d.cmd) return;
+        var v = document.querySelector('video');
+
+        if (d.cmd === 'iframe-fs') {
+            document.querySelectorAll('iframe').forEach(function(f) {
+                if (f.contentWindow === e.source) {
+                    var pst = document.getElementById('if-parent-fs');
+                    if (d.val) {
+                        if (!pst) {
+                            pst = document.createElement('style');
+                            pst.id = 'if-parent-fs';
+                            pst.textContent = 'html,body{margin:0!important;padding:0!important;overflow:hidden!important;}iframe[data-if-fs="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:999999!important;background:#000!important;}';
+                            document.head.appendChild(pst);
+                        }
+                        f.setAttribute('data-if-fs', '1');
+                    } else {
+                        f.removeAttribute('data-if-fs');
+                        if (pst) pst.remove();
+                    }
+                }
+            });
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ tok: '\(msgToken)', cmd: 'iframe-fs', val: d.val }, '*');
+            } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fullscreenToggle) {
+                window.webkit.messageHandlers.fullscreenToggle.postMessage(Boolean(d.val));
+            }
+            return;
+        }
+
+        if (d.cmd === 'click') {
+            var ce = document.elementFromPoint(d.x, d.y);
+            if (ce) {
+                var r = ce.getBoundingClientRect();
+                var inCorner = (r.right > window.innerWidth - 90 && r.bottom > window.innerHeight - 90);
+                var fsBtn = ce.closest('.jw-icon-fullscreen,.plyr__control[data-plyr="fullscreen"],.vjs-fullscreen-control,.art-icon-fullscreen,[aria-label*="full" i],[title*="full" i],[class*="fullscreen" i]') || (inCorner ? ce.closest('button,[role=button],svg') : null);
+                if (fsBtn && window.top !== window) {
+                    window.__isIfFs = !window.__isIfFs;
+                    var st = document.getElementById('if-fs');
+                    if (window.__isIfFs) {
+                        if (!st) {
+                            st = document.createElement('style');
+                            st.id = 'if-fs';
+                            st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
+                            document.head.appendChild(st);
+                            }
+                            } else if (st) {
+                            st.remove();
+                            }
+                            window.parent.postMessage({ tok: '(msgToken)', cmd: 'iframe-fs', val: window.__isIfFs }, '*');
+                            return;
+                            }
+                            var bt = ce.closest('button,[role=button],a,li,input,label,[tabindex]') || ce;
+                            var po = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 };
+                            var mo = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 };
+                            if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerdown', po));
+                            bt.dispatchEvent(new MouseEvent('mousedown', mo));
+                            if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerup', po));
+                            bt.dispatchEvent(new MouseEvent('mouseup', mo));
+                            bt.click();
+                            }
+                            return;
+                            }
+                            if (d.cmd === 'pause') {
+                            document.querySelectorAll('video,audio').forEach(function(m) { m.pause(); });
+                            document.querySelectorAll('iframe').forEach(function(f) {
+                            try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+                            });
+                            return;
+                            }
+                            if (d.cmd === 'fs') {
+                            var st = document.getElementById('if-fs');
+                            if (d.val) {
+                            if (!st) {
+                            st = document.createElement('style');
+                            st.id = 'if-fs';
+                            st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
+                            document.head.appendChild(st);
+                            }
+                            } else if (st) {
+                            st.remove();
+                            }
+                            document.querySelectorAll('iframe').forEach(function(f) {
+                            try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+                            });
+                            return;
+                            }
+                            if (d.cmd === 'down') {
+                            var de = document.elementFromPoint(d.x, d.y) || document.body;
+                            window.__dragEl = de;
+                            de.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
+                            de.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
+                            return;
+                            }
+                            if (d.cmd === 'move') {
+                            var me = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
+                            me.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
+                            me.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
+                            return;
+                            }
+                            if (d.cmd === 'up') {
+                            var ue = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
+                            ue.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
+                            ue.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 0 }));
+                            window.__dragEl = null;
+                            return;
+                            }
+                            if (d.cmd === 'hover') {
+                            var hx = d.x || 100, hy = d.y || 100;
+                            var he = document.elementFromPoint(hx, hy);
+                            if (window.__lastHoverEl && window.__lastHoverEl !== he) {
+                            window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he }));
+                            window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he }));
+                            }
+                            window.__lastHoverEl = he;
+                            var onProg = he && he.closest('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]');
+                            if (!onProg) {
+                            document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control').forEach(function(p) {
+                            p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy }));
+                            p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy }));
+                            });
+                            }
+                            if (he && he.tagName === 'IFRAME') {
+                            var hr = he.getBoundingClientRect();
+                            try { he.contentWindow.postMessage({ tok: '(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
+                            return;
+                            }
+                            var t = he || v || document.body;
+                            t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: hx, clientY: hy }));
+                            if (window.PointerEvent) t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hx, clientY: hy }));
+                            var pl = document.querySelector('.jwplayer,.plyr,.video-js,.art-video-player');
+                            if (pl) {
+                            pl.classList.remove('jw-flag-user-inactive', 'plyr--hide-controls', 'vjs-user-inactive', 'art-control-hide');
+                            pl.classList.add('jw-flag-user-active', 'vjs-user-active', 'art-hover');
+                            clearTimeout(window.__ifHide);
+                            window.__ifHide = setTimeout(function() {
+                            pl.classList.add('jw-flag-user-inactive', 'plyr--hide-controls', 'vjs-user-inactive');
+                            pl.classList.remove('jw-flag-user-active', 'vjs-user-active', 'art-hover');
+                            }, 2500);
+                            }
+                            return;
+                            }
+                            document.querySelectorAll('iframe').forEach(function(f) {
+                            try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+                            });
+                            if (!v) return;
+                            if (d.cmd === 'toggle') {
+                            v.paused ? v.play() : v.pause();
+                            } else if (d.cmd === 'skip' && isFinite(v.duration)) {
+                            v.currentTime = Math.min(Math.max(0, v.currentTime + d.val), v.duration);
+                            } else if (d.cmd === 'seek' && isFinite(v.duration)) {
+                            v.currentTime = v.duration * d.val;
+                            }
+                            });
+                            """
+                            let script = WKUserScript(
+                            source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
+                            injectionTime: .atDocumentEnd,
+                            forMainFrameOnly: false
+                            )
+                            config.userContentController.addUserScript(script)
+                            let wv = WKWebView(frame: .zero, configuration: config)
+                            wv.navigationDelegate = delegate
+                            wv.customUserAgent = isDesktop
+                            ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
+                            : "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+                            wv.backgroundColor = .black
+                            wv.isOpaque = true
+                            wv.scrollView.contentInsetAdjustmentBehavior = .never
+                            return wv
+                            }
     static func pauseAllMedia(in webViews: [WKWebView?]) {
         let js = "document.querySelectorAll('video,audio').forEach(function(m){m.pause();});document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'pause'},'*');}catch(e){}});"
         webViews.forEach { $0?.evaluateJavaScript(js, completionHandler: nil) }
