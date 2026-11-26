@@ -58,12 +58,14 @@ final class WebEngine {
     // 3. SAFETY OVERRIDES, FALLBACK SKIPPER, UNMUTER & IFRAME CONTROLS (.atDocumentEnd)
     let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){};"
     let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){};"
-    let s3 = "Element.prototype.requestFullscreen=function(){return Promise.resolve();};"
-    let s4 = "Element.prototype.webkitRequestFullscreen=function(){};"
+    let s3 = "Element.prototype.requestFullscreen=function(){if(window.top!==window){window.__isIfFs=!window.__isIfFs;window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:window.__isIfFs},'*');}return Promise.resolve();};"
+    let s4 = "Element.prototype.webkitRequestFullscreen=function(){if(window.top!==window){window.__isIfFs=!window.__isIfFs;window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:window.__isIfFs},'*');}};document.exitFullscreen=function(){if(window.top!==window&&window.__isIfFs){window.__isIfFs=false;window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:false},'*');}return Promise.resolve();};document.webkitExitFullscreen=document.exitFullscreen;"
     let s4b = "window.open=function(){return null;};"
-    let s5 = "var st=document.createElement('style');st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container,[class*=\"preview\" i]:not(ytd-video-preview),[class*=\"thumbnail\" i]:not(ytd-thumbnail):not(ytm-thumbnail-cover),[data-part*=\"thumbnail\" i],.vds-thumbnail,.art-progress-tip{display:none!important;visibility:hidden!important;opacity:0!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
+    let s5a = "var st=document.createElement('style');"
+    let s5b = "st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container,.art-progress-tip,.jw-preview,.plyr__preview-thumb,.vds-thumbnail,[data-part*=\"thumbnail\" i],[class*=\"preview\" i]:not([class*=\"yt\" i]){display:none!important;visibility:hidden!important;opacity:0!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
     let s6 = "window.__userMuted=false;document.addEventListener('click',function(e){if(e.target&&e.target.closest('.ytp-mute-button')){var v=document.querySelector('video');if(v)window.__userMuted=!v.muted;}},true);setInterval(function(){"
-    let s7 = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
+    let s7a = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
+    let s7b = "if(window.top!==window&&document.querySelector('video')){document.querySelectorAll('div').forEach(function(el){var r=el.getBoundingClientRect();if(r.width>60&&r.width<260&&r.height>40&&r.height<180&&r.bottom<window.innerHeight-30&&r.bottom>window.innerHeight-180){var cs=getComputedStyle(el);if((cs.position==='absolute'||cs.position==='fixed')&&(el.querySelector('canvas,img')||(cs.backgroundImage&&cs.backgroundImage!=='none'))){el.style.setProperty('display','none','important');}}});}"
     let s8 = "var skipBtns=document.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text,.ytp-ad-overlay-close-button');"
     let s9 = "skipBtns.forEach(function(s){if(window.PointerEvent){s.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));s.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));}s.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));s.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));s.click();});"
     let s10 = "var ad=document.querySelector('.ad-showing,.ad-interrupting');"
@@ -76,7 +78,18 @@ final class WebEngine {
         if (!d || d.tok !== '\(msgToken)' || !d.cmd) return;
         var v = document.querySelector('video');
 
-        if (d.cmd === 'iframe-fs') {
+              if (d.cmd === 'iframe-fs') {
+            var st = document.getElementById('if-fs');
+            if (d.val) {
+                if (!st) {
+                    st = document.createElement('style');
+                    st.id = 'if-fs';
+                    st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
+                    document.head.appendChild(st);
+                }
+            } else if (st) {
+                st.remove();
+            }
             document.querySelectorAll('iframe').forEach(function(f) {
                 if (f.contentWindow === e.source) {
                     var pst = document.getElementById('if-parent-fs');
@@ -102,39 +115,22 @@ final class WebEngine {
             return;
         }
 
-        if (d.cmd === 'click') {
+
+               if (d.cmd === 'click') {
             var ce = document.elementFromPoint(d.x, d.y);
             if (ce) {
-                var r = ce.getBoundingClientRect();
-                var inCorner = (r.right > window.innerWidth - 90 && r.bottom > window.innerHeight - 90);
-                var fsBtn = ce.closest('.jw-icon-fullscreen,.plyr__control[data-plyr="fullscreen"],.vjs-fullscreen-control,.art-icon-fullscreen,[aria-label*="full" i],[title*="full" i],[class*="fullscreen" i]') || (inCorner ? ce.closest('button,[role=button],svg') : null);
-                if (fsBtn && window.top !== window) {
-                    window.__isIfFs = !window.__isIfFs;
-                    var st = document.getElementById('if-fs');
-                    if (window.__isIfFs) {
-                        if (!st) {
-                            st = document.createElement('style');
-                            st.id = 'if-fs';
-                            st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
-                            document.head.appendChild(st);
-                            }
-                            } else if (st) {
-                            st.remove();
-                            }
-                            window.parent.postMessage({ tok: '\(msgToken)', cmd: 'iframe-fs', val: window.__isIfFs }, '*');
-                            return;
-                            }
-                            var bt = ce.closest('button,[role=button],a,li,input,label,[tabindex]') || ce;
-                            var po = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 };
-                            var mo = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 };
-                            if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerdown', po));
-                            bt.dispatchEvent(new MouseEvent('mousedown', mo));
-                            if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerup', po));
-                            bt.dispatchEvent(new MouseEvent('mouseup', mo));
-                            bt.click();
-                            }
-                            return;
-                            }
+                var bt = ce.closest('button,[role=button],a,li,input,label,[tabindex]') || ce;
+                var po = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 };
+                var mo = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 };
+                if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerdown', po));
+                bt.dispatchEvent(new MouseEvent('mousedown', mo));
+                if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerup', po));
+                bt.dispatchEvent(new MouseEvent('mouseup', mo));
+                bt.click();
+            }
+            return;
+        }
+
                             if (d.cmd === 'pause') {
                             document.querySelectorAll('video,audio').forEach(function(m) { m.pause(); });
                             document.querySelectorAll('iframe').forEach(function(f) {
@@ -228,12 +224,14 @@ final class WebEngine {
         });
 """
         let script = WKUserScript(
-            source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
+            source: s1 + s2 + s3 + s4 + s4b + s5a + s5b + s6 + s7a + s7b + s8 + s9 + s10 + s11 + s12 + s13 + s14,
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: false
-                            )
+        )
+
                             config.userContentController.addUserScript(script)
                             let wv = WKWebView(frame: .zero, configuration: config)
+                                wv.navigationDelegate = delegate
                                    wv.customUserAgent = isDesktop
             ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
             : "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
