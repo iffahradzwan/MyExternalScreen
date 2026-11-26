@@ -10,10 +10,21 @@ final class WebEngine {
         config.allowsAirPlayForMediaPlayback = true
         config.allowsPictureInPictureMediaPlayback = false
         config.mediaTypesRequiringUserActionForPlayback = []
-
-        // 1. EARLY AD-STRIPPING INTERCEPTOR (.atDocumentStart)
+        
+        // 1. EARLY AD-STRIPPING & INSTANT PLAYSINLINE (.atDocumentStart)
         let earlyAdBlockJS = """
         (function() {
+            const origCreate = document.createElement;
+            document.createElement = function(tagName, options) {
+                const el = origCreate.call(this, tagName, options);
+                if (typeof tagName === 'string' && tagName.toLowerCase() === 'video') {
+                    el.setAttribute('playsinline', '');
+                    el.setAttribute('webkit-playsinline', '');
+                    el.playsInline = true;
+                }
+                return el;
+            };
+
             const cleanAdData = (obj) => {
                 if (!obj || typeof obj !== 'object') return obj;
                 delete obj.adPlacements;
@@ -50,6 +61,8 @@ final class WebEngine {
             };
         })();
         """
+
+
         config.userContentController.addUserScript(
             WKUserScript(source: earlyAdBlockJS, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
