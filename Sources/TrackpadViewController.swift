@@ -327,32 +327,33 @@ let delta = gesture.translation(in: trackpadView)
 gesture.setTranslation(.zero, in: trackpadView)
 ext.moveCursor(dx: delta.x * 2.2, dy: delta.y * 2.2)
 }
-@objc private func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
-    guard let ext = externalVC, let webView = ext.activeWebView else { return }
-    let delta = gesture.translation(in: trackpadView)
-    gesture.setTranslation(.zero, in: trackpadView)
-    let dx = -Double(delta.x) * 2.2
-    let dy = -Double(delta.y) * 2.2
-    let tip = CGPoint(x: ext.cursorView.frame.minX + 4, y: ext.cursorView.frame.minY + 3)
-    let pt = ext.view.convert(tip, to: webView)
+    @objc private func handleScrollPan(_ gesture: UIPanGestureRecognizer) {
+        guard let ext = externalVC, let webView = ext.activeWebView else { return }
+        let delta = gesture.translation(in: trackpadView)
+        gesture.setTranslation(.zero, in: trackpadView)
+        let dx = -Double(delta.x) * 2.2
+        let dy = -Double(delta.y) * 2.2
+        let tip = CGPoint(x: ext.cursorView.frame.minX + 4, y: ext.cursorView.frame.minY + 3)
+        let pt = ext.view.convert(tip, to: webView)
 
-    let s1 = "(function(){var el=document.elementFromPoint(\(pt.x),\(pt.y));"
-    let s2 = "while(el&&el!==document.body&&el!==document.documentElement){"
-    let s3 = "var st=getComputedStyle(el);"
-    let s4 = "if((st.overflowY==='auto'||st.overflowY==='scroll')&&el.scrollHeight>el.clientHeight+2){el.scrollTop+=\(dy);return true;}"
-    let s5 = "el=el.parentElement;}return false;})()"
+        let s0 = "(function(){if(location.pathname.indexOf('/shorts/')===0){if(Math.abs(\(dy))>12&&!window.__shortLock){window.__shortLock=true;var wheelDir=\(dy)>0?120:-120;var target=document.querySelector('ytd-shorts')||document.elementFromPoint(\(pt.x),\(pt.y))||document.body;target.dispatchEvent(new WheelEvent('wheel',{deltaY:wheelDir,deltaMode:0,bubbles:true,cancelable:true}));setTimeout(function(){window.__shortLock=false;},450);}return true;}"
+        let s1 = "var el=document.elementFromPoint(\(pt.x),\(pt.y));"
+        let s2 = "while(el&&el!==document.body&&el!==document.documentElement){"
+        let s3 = "var st=getComputedStyle(el);"
+        let s4 = "if((st.overflowY==='auto'||st.overflowY==='scroll')&&el.scrollHeight>el.clientHeight+2){el.scrollTop+=\(dy);return true;}"
+        let s5 = "el=el.parentElement;}return false;})()"
 
-    webView.evaluateJavaScript(s1 + s2 + s3 + s4 + s5) { res, _ in
-        if (res as? Bool) != true {
-            let sv = webView.scrollView
-            let maxX = max(0, sv.contentSize.width - sv.bounds.width)
-            let maxY = max(0, sv.contentSize.height - sv.bounds.height)
-            let nx = min(max(0, sv.contentOffset.x + CGFloat(dx)), maxX)
-            let ny = min(max(0, sv.contentOffset.y + CGFloat(dy)), maxY)
-            sv.setContentOffset(CGPoint(x: nx, y: ny), animated: false)
+        webView.evaluateJavaScript(s0 + s1 + s2 + s3 + s4 + s5) { res, _ in
+            if (res as? Bool) != true {
+                let sv = webView.scrollView
+                let maxX = max(0, sv.contentSize.width - sv.bounds.width)
+                let maxY = max(0, sv.contentSize.height - sv.bounds.height)
+                let nx = min(max(0, sv.contentOffset.x + CGFloat(dx)), maxX)
+                let ny = min(max(0, sv.contentOffset.y + CGFloat(dy)), maxY)
+                sv.setContentOffset(CGPoint(x: nx, y: ny), animated: false)
+            }
         }
     }
-}
 
 
 @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
