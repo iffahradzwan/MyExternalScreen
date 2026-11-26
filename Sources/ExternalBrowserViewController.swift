@@ -658,7 +658,6 @@ wv.load(req)
 }
 // MARK: - App Switching & Window Management
 @objc func showDesktop() {
-pauseAllMediaOnBackground()
 currentMode = .desktop
 isVideoZoomedFull = false
 menuAppTitleLabel.text = "Finder"
@@ -922,15 +921,17 @@ func toggleFullscreen() {
     view.layoutIfNeeded()
     WebEngine.toggleWebFullscreen(isFull: isVideoZoomedFull, in: activeWebView)
 }
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "fullscreenToggle", let isFull = message.body as? Bool {
             isVideoZoomedFull = isFull
             menuBar.isHidden = isFull
             dockView.isHidden = isFull
+            windowTitleBar.isHidden = isFull
             view.setNeedsLayout()
             view.layoutIfNeeded()
         }
     }
+
 
 }
    
