@@ -26,56 +26,6 @@ final class WebEngine {
             WKUserScript(source: e1 + e2 + e3 + e4 + e5 + e6 + e7, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
 
-        // 2. NETWORK-LEVEL CONTENT BLOCKER (keep your blockRules right below here!)
-
-
-        const cleanAdData = (obj) => {
-            if (!obj || typeof obj !== 'object') return obj;
-            delete obj.adPlacements;
-            delete obj.playerAds;
-            delete obj.adSlots;
-            delete obj.adBreakHeartbeatParams;
-            return obj;
-        };
-
-        const origParse = JSON.parse;
-        JSON.parse = function(text, reviver) {
-            const data = origParse.apply(this, arguments);
-            return cleanAdData(data);
-        };
-
-        const origRespJson = Response.prototype.json;
-        Response.prototype.json = async function() {
-            const data = await origRespJson.apply(this, arguments);
-            return cleanAdData(data);
-        };
-
-        const origXHROpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function(method, url) {
-            this.__reqUrl = typeof url === 'string' ? url : '';
-            return origXHROpen.apply(this, arguments);
-        };
-        const origXHRSend = XMLHttpRequest.prototype.send;
-        XMLHttpRequest.prototype.send = function() {
-            if (this.__reqUrl && (this.__reqUrl.includes('/youtubei/v1/player') || this.__reqUrl.includes('/youtubei/v1/next'))) {
-                this.addEventListener('readystatechange', function() {
-                    if (this.readyState === 4 && this.responseText) {
-                        try {
-                            const cleaned = JSON.stringify(cleanAdData(origParse(this.responseText)));
-                            Object.defineProperty(this, 'responseText', { get: () => cleaned });
-                            Object.defineProperty(this, 'response', { get: () => cleaned });
-                        } catch (e) {}
-                    }
-                });
-            }
-            return origXHRSend.apply(this, arguments);
-        };
-    })();
-    """
-    config.userContentController.addUserScript(
-        WKUserScript(source: earlyAdBlockJS, injectionTime: .atDocumentStart, forMainFrameOnly: false)
-    )
-
     // 2. NETWORK-LEVEL CONTENT BLOCKER
     let blockRules = """
     [
