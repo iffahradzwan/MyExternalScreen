@@ -336,7 +336,7 @@ ext.moveCursor(dx: delta.x * 2.2, dy: delta.y * 2.2)
         let tip = CGPoint(x: ext.cursorView.frame.minX + 4, y: ext.cursorView.frame.minY + 3)
         let pt = ext.view.convert(tip, to: webView)
 
-        let s0 = "(function(){if(location.pathname.indexOf('/shorts/')===0){if(Math.abs(\(dy))>12&&!window.__shortLock){window.__shortLock=true;var wheelDir=\(dy)>0?120:-120;var target=document.querySelector('ytd-shorts')||document.elementFromPoint(\(pt.x),\(pt.y))||document.body;target.dispatchEvent(new WheelEvent('wheel',{deltaY:wheelDir,deltaMode:0,bubbles:true,cancelable:true}));setTimeout(function(){window.__shortLock=false;},450);}return true;}"
+        let s0 = "(function(){if(location.pathname.indexOf('/shorts/')===0){if(Math.abs(\(dy))>3&&!window.__shortLock){window.__shortLock=true;var wheelDir=\(dy)>0?120:-120;var target=document.querySelector('ytd-shorts')||document.elementFromPoint(\(pt.x),\(pt.y))||document.body;target.dispatchEvent(new WheelEvent('wheel',{deltaY:wheelDir,deltaMode:0,bubbles:true,cancelable:true}));setTimeout(function(){window.__shortLock=false;},450);}return true;}"
         let s1 = "var el=document.elementFromPoint(\(pt.x),\(pt.y));"
         let s2 = "while(el&&el!==document.body&&el!==document.documentElement){"
         let s3 = "var st=getComputedStyle(el);"
