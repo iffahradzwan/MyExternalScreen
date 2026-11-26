@@ -648,14 +648,13 @@ arrowImg.layer.shadowOffset = CGSize(width: 1, height: 1)
 cursorView.addSubview(arrowImg)
 view.addSubview(cursorView)
 }
-private func loadFresh(_ urlString: String, into wv: WKWebView) {
-wv.stopLoading()
-if let url = URL(string: urlString) {
-var req = URLRequest(url: url)
-req.cachePolicy = .reloadIgnoringLocalCacheData
-wv.load(req)
-}
-}
+    private func loadFresh(_ urlString: String, into wv: WKWebView) {
+        wv.stopLoading()
+        if let url = URL(string: urlString) {
+            wv.load(URLRequest(url: url))
+        }
+    }
+
 // MARK: - App Switching & Window Management
 @objc func showDesktop() {
 currentMode = .desktop
