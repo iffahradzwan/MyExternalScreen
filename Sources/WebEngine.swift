@@ -58,8 +58,8 @@ final class WebEngine {
     // 3. SAFETY OVERRIDES, FALLBACK SKIPPER, UNMUTER & IFRAME CONTROLS (.atDocumentEnd)
     let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){};"
     let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){};"
-    let s3 = "Element.prototype.requestFullscreen=function(){if(window.top!==window){window.__isIfFs=true;window.postMessage({tok:'\(msgToken)',cmd:'fs',val:true},'*');window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:true},'*');}return Promise.resolve();};"
-    let s4 = "Element.prototype.webkitRequestFullscreen=Element.prototype.requestFullscreen;document.exitFullscreen=function(){if(window.top!==window){window.__isIfFs=false;window.postMessage({tok:'\(msgToken)',cmd:'fs',val:false},'*');window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:false},'*');}return Promise.resolve();};document.webkitExitFullscreen=document.exitFullscreen;"
+    let s3 = "window.__fsEl=null;try{Object.defineProperty(document,'fullscreenElement',{get:function(){return window.__fsEl;}});Object.defineProperty(document,'webkitFullscreenElement',{get:function(){return window.__fsEl;}});}catch(e){}Element.prototype.requestFullscreen=function(){if(window.top!==window){window.__fsEl=this;window.__isIfFs=true;document.dispatchEvent(new Event('fullscreenchange'));window.postMessage({tok:'\(msgToken)',cmd:'fs',val:true},'*');window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:true},'*');}return Promise.resolve();};"
+    let s4 = "Element.prototype.webkitRequestFullscreen=Element.prototype.requestFullscreen;document.exitFullscreen=function(){if(window.top!==window){window.__fsEl=null;window.__isIfFs=false;document.dispatchEvent(new Event('fullscreenchange'));window.postMessage({tok:'\(msgToken)',cmd:'fs',val:false},'*');window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:false},'*');}return Promise.resolve();};document.webkitExitFullscreen=document.exitFullscreen;"
     let s4b = "window.open=function(){return null;};"
     let s5a = "var st=document.createElement('style');"
     let s5b = "st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container,.art-progress-tip,.jw-preview,.plyr__preview-thumb,.vds-thumbnail,[data-part*=\"thumbnail\" i],[class*=\"preview\" i]:not([class*=\"yt\" i]){display:none!important;visibility:hidden!important;opacity:0!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
@@ -138,9 +138,14 @@ final class WebEngine {
                             });
                             return;
                             }
-                                               if (d.cmd === 'fs') {
+                                                      if (d.cmd === 'fs') {
             window.__isIfFs = Boolean(d.val);
+            if (!d.val && window.__fsEl) {
+                window.__fsEl = null;
+                document.dispatchEvent(new Event('fullscreenchange'));
+            }
             var st = document.getElementById('if-fs');
+
 
                 if (d.val) {
                     if (!st) {
