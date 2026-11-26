@@ -3,38 +3,31 @@ import WebKit
 
 final class WebEngine {
     private static let msgToken = UUID().uuidString
+    static func makeWebView(delegate: WKNavigationDelegate, isDesktop: Bool = false) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        if let handler = delegate as? WKScriptMessageHandler {
+            config.userContentController.add(handler, name: "fullscreenToggle")
+        }
+        config.allowsInlineMediaPlayback = true
+        config.allowsAirPlayForMediaPlayback = true
+        config.allowsPictureInPictureMediaPlayback = false
+        config.mediaTypesRequiringUserActionForPlayback = []
 
-  static func makeWebView(delegate: WKNavigationDelegate, isDesktop: Bool = false) -> WKWebView {
-    let config = WKWebViewConfiguration()
-    if let handler = delegate as? WKScriptMessageHandler {
-        config.userContentController.add(handler, name: "fullscreenToggle")
-    }
-    config.allowsInlineMediaPlayback = true
-    config.allowsAirPlayForMediaPlayback = true
-    config.allowsPictureInPictureMediaPlayback = false
-    config.mediaTypesRequiringUserActionForPlayback = []
+        // 1. EARLY AD-STRIPPING, VISIBILITY & PLAYSINLINE (.atDocumentStart)
+        let e1 = "(function(){try{Object.defineProperty(document,'hidden',{get:function(){return false;}});Object.defineProperty(document,'webkitHidden',{get:function(){return false;}});Object.defineProperty(document,'visibilityState',{get:function(){return 'visible';}});Object.defineProperty(document,'webkitVisibilityState',{get:function(){return 'visible';}});document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation();},true);document.addEventListener('webkitvisibilitychange',function(e){e.stopImmediatePropagation();},true);}catch(e){}"
+        let e2 = "var origCreate=document.createElement;document.createElement=function(tag,opt){var el=origCreate.call(this,tag,opt);if(typeof tag==='string'&&tag.toLowerCase()==='video'){el.setAttribute('playsinline','');el.setAttribute('webkit-playsinline','');el.playsInline=true;}return el;};"
+        let e3 = "function cleanAdData(o){if(!o||typeof o!=='object')return o;delete o.adPlacements;delete o.playerAds;delete o.adSlots;delete o.adBreakHeartbeatParams;return o;}"
+        let e4 = "var _ytInit=undefined;try{Object.defineProperty(window,'ytInitialPlayerResponse',{configurable:true,get:function(){return _ytInit;},set:function(v){_ytInit=cleanAdData(v);}});}catch(e){}"
+        let e5 = "var origParse=JSON.parse;JSON.parse=function(){return cleanAdData(origParse.apply(this,arguments));};"
+        let e6 = "var origJson=Response.prototype.json;Response.prototype.json=async function(){return cleanAdData(await origJson.apply(this,arguments));};"
+        let e7 = "var origOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){this.__u=typeof u==='string'?u:'';return origOpen.apply(this,arguments);};var origSend=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.send=function(){if(this.__u&&(this.__u.indexOf('/youtubei/v1/player')!==-1||this.__u.indexOf('/youtubei/v1/next')!==-1)){this.addEventListener('readystatechange',function(){if(this.readyState===4&&this.responseText){try{var c=JSON.stringify(cleanAdData(origParse(this.responseText)));Object.defineProperty(this,'responseText',{get:function(){return c;}});Object.defineProperty(this,'response',{get:function(){return c;}});}catch(e){}}});}return origSend.apply(this,arguments);};})();"
 
-    // 1. EARLY AD-STRIPPING, VISIBILITY & PLAYSINLINE (.atDocumentStart)
-    let earlyAdBlockJS = """
-    (function() {
-        // Keep YouTube playing when window is minimized (isHidden = true)
-        try {
-            Object.defineProperty(document, 'hidden', { get: () => false });
-            Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
-            document.addEventListener('visibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
-        } catch (e) {}
+        config.userContentController.addUserScript(
+            WKUserScript(source: e1 + e2 + e3 + e4 + e5 + e6 + e7, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        )
 
-        // Instant playsinline at 0ms
-        const origCreate = document.createElement;
-        document.createElement = function(tagName, options) {
-            const el = origCreate.call(this, tagName, options);
-            if (typeof tagName === 'string' && tagName.toLowerCase() === 'video') {
-                el.setAttribute('playsinline', '');
-                el.setAttribute('webkit-playsinline', '');
-                el.playsInline = true;
-            }
-            return el;
-        };
+        // 2. NETWORK-LEVEL CONTENT BLOCKER (keep your blockRules right below here!)
+
 
         const cleanAdData = (obj) => {
             if (!obj || typeof obj !== 'object') return obj;
@@ -118,7 +111,7 @@ final class WebEngine {
     let s3 = "Element.prototype.requestFullscreen=function(){return Promise.resolve();};"
     let s4 = "Element.prototype.webkitRequestFullscreen=function(){};"
     let s4b = "window.open=function(){return null;};"
-    let s5 = "var st=document.createElement('style');st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container{display:none!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
+    let s5 = "var st=document.createElement('style');st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container,.art-progress-tip,.jw-preview,.plyr__preview-thumb,[class*=\"preview\" i][class*=\"thumb\" i]{display:none!important;opacity:0!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
     let s6 = "window.__userMuted=false;document.addEventListener('click',function(e){if(e.target&&e.target.closest('.ytp-mute-button')){var v=document.querySelector('video');if(v)window.__userMuted=!v.muted;}},true);setInterval(function(){"
     let s7 = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
     let s8 = "var skipBtns=document.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text,.ytp-ad-overlay-close-button');"
@@ -291,10 +284,10 @@ final class WebEngine {
                             )
                             config.userContentController.addUserScript(script)
                             let wv = WKWebView(frame: .zero, configuration: config)
-                            wv.navigationDelegate = delegate
-                            wv.customUserAgent = isDesktop
-                            ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
-                            : "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+                                   wv.customUserAgent = isDesktop
+            ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            : "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+
                             wv.backgroundColor = .black
                             wv.isOpaque = true
                             wv.scrollView.contentInsetAdjustmentBehavior = .never
