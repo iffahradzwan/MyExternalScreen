@@ -79,9 +79,11 @@ private func restoreSession() {
 
         setupDesktopEnvironment()
         
-        youtubeWebView = WebEngine.makeWebView(delegate: self)
-        netflixWebView = WebEngine.makeWebView(delegate: self)
-        chromeWebView = WebEngine.makeWebView(delegate: self)
+     
+youtubeWebView = WebEngine.makeWebView(delegate: self, isDesktop: true)
+netflixWebView = WebEngine.makeWebView(delegate: self)
+chromeWebView = WebEngine.makeWebView(delegate: self,isDesktop: true)
+
         youtubeWebView.uiDelegate = self
         netflixWebView.uiDelegate = self
         chromeWebView.uiDelegate = self
