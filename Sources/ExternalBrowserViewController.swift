@@ -1,7 +1,7 @@
 import UIKit
 import WebKit
 
-class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
+class ExternalBrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
        var youtubeWebView: WKWebView!
     var netflixWebView: WKWebView!
     var chromeWebViews: [WKWebView] = []
@@ -922,6 +922,15 @@ func toggleFullscreen() {
     view.layoutIfNeeded()
     WebEngine.toggleWebFullscreen(isFull: isVideoZoomedFull, in: activeWebView)
 }
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "fullscreenToggle", let isFull = message.body as? Bool {
+            isVideoZoomedFull = isFull
+            menuBar.isHidden = isFull
+            dockView.isHidden = isFull
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
+        }
+    }
 
 }
    
