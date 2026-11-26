@@ -6,6 +6,10 @@ final class WebEngine {
 
     static func makeWebView(delegate: WKNavigationDelegate, isDesktop: Bool = false) -> WKWebView {
         let config = WKWebViewConfiguration()
+        if let handler = delegate as? WKScriptMessageHandler {
+    config.userContentController.add(handler, name: "fullscreenToggle")
+}
+
         config.allowsInlineMediaPlayback = true
         config.allowsAirPlayForMediaPlayback = true
         config.allowsPictureInPictureMediaPlayback = false
