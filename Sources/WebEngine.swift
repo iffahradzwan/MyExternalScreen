@@ -25,11 +25,12 @@ final class WebEngine {
                 return el;
             };
 
-            const cleanAdData = (obj) => {
+                        const cleanAdData = (obj) => {
                 if (!obj || typeof obj !== 'object') return obj;
                 delete obj.adPlacements;
                 delete obj.playerAds;
                 delete obj.adSlots;
+                delete obj.adBreakHeartbeatParams;
                 return obj;
             };
 
@@ -42,8 +43,9 @@ final class WebEngine {
             const origFetch = window.fetch;
             window.fetch = async function(...args) {
                 const response = await origFetch.apply(this, args);
-                const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
-                if (url.includes('/youtubei/v1/player')) {
+                const req = args[0];
+                const url = typeof req === 'string' ? req : (req && req.url ? req.url : '');
+                if (url.includes('/youtubei/v1/player') || url.includes('/youtubei/v1/next')) {
                     const clone = response.clone();
                     try {
                         const json = await clone.json();
@@ -59,6 +61,7 @@ final class WebEngine {
                 }
                 return response;
             };
+
         })();
         """
 
@@ -135,10 +138,11 @@ final class WebEngine {
                         }
                     }
                 });
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ tok: '\(msgToken)', cmd: 'iframe-fs', val: d.val }, '*');
+                    if (window.top === window && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fullscreenToggle) {
+                    window.webkit.messageHandlers.fullscreenToggle.postMessage(Boolean(d.val));
                 }
                 return;
+
             }
 
             if (d.cmd === 'click') {
