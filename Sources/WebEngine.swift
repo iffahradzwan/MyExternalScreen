@@ -279,15 +279,15 @@ guard let arr = result as? [Double], let cur = arr.first, let dur = arr.last, du
 completion(cur, dur)
 }
 }
-static func toggleWebFullscreen(isFull: Bool, in webView: WKWebView?) {
-let fullFlag = isFull ? "true" : "false"
-let f1 = "(function(){document.querySelectorAll('video').forEach(function(v){if(v.webkitExitFullscreen){try{v.webkitExitFullscreen();}catch(e){}}});"
-let f2 = "var style=document.getElementById('custom-fs-style');"
-let f3 = "if(" + fullFlag + "){"
-let f4 = "if(!style){style=document.createElement('style');style.id='custom-fs-style';"
-let f5 = "style.textContent='body{overflow:hidden!important;}iframe,#movie_player,.html5-video-player,video,.html5-video-container,.html5-main-video{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:999999!important;background:#000!important;object-fit:cover!important;}#player-control-overlay,.player-controls-content{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;z-index:1000000!important;}ytd-masthead,#secondary,#below,#guide,ytm-mobile-topbar-renderer,ytm-engagement-panel-section-list-renderer{display:none!important;}';"
-let f6 = "document.head.appendChild(style);}"
-let f7 = "}else{if(style){style.remove();}}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:" + fullFlag + "},'*');}catch(e){}});window.dispatchEvent(new Event('resize'));})();"
-webView?.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6 + f7, completionHandler: nil)
-}
+    static func toggleWebFullscreen(isFull: Bool, in webView: WKWebView?) {
+        let fullFlag = isFull ? "true" : "false"
+        let f1 = "(function(){document.querySelectorAll('video').forEach(function(v){if(v.webkitExitFullscreen){try{v.webkitExitFullscreen();}catch(e){}}});"
+        let f2 = "var style=document.getElementById('custom-fs-style');"
+        let f3 = "if(" + fullFlag + "){"
+        let f4 = "if(!style){style=document.createElement('style');style.id='custom-fs-style';"
+        let f5 = "style.textContent='body{overflow:hidden!important;}iframe,#movie_player,.html5-video-player{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:999999!important;background:#000!important;}#movie_player video,.html5-video-container,.html5-main-video{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:1!important;object-fit:contain!important;}.ytp-chrome-bottom,.ytp-chrome-top,.ytp-gradient-bottom,.ytp-gradient-top,#player-control-overlay,.player-controls-content{z-index:1000000!important;}ytd-masthead,#secondary,#below,#guide,#inline-preview-player,ytm-mobile-topbar-renderer,ytm-engagement-panel-section-list-renderer{display:none!important;}';"
+        let f6 = "document.head.appendChild(style);}"
+        let f7 = "}else{if(style){style.remove();}}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:" + fullFlag + "},'*');}catch(e){}});window.dispatchEvent(new Event('resize'));})();"
+        webView?.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6 + f7, completionHandler: nil)
+    }
 }
