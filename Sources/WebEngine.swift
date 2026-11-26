@@ -196,7 +196,7 @@ final class WebEngine {
                             }
                             if (he && he.tagName === 'IFRAME') {
                             var hr = he.getBoundingClientRect();
-                            try { he.contentWindow.postMessage({ tok: '(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
+                           try { he.contentWindow.postMessage({ tok: '\(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
                             return;
                             }
                             var t = he || v || document.body;
