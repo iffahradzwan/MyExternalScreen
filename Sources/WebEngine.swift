@@ -235,11 +235,20 @@ final class WebEngine {
                     window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he }));
                     window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he }));
                 }
-                window.__lastHoverEl = he;
+                               window.__lastHoverEl = he;
+                var onProg = he && he.closest('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]');
+                if (!onProg) {
+                    document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control').forEach(function(p) {
+                        p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy }));
+                        p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy }));
+                    });
+                }
                 if (he && he.tagName === 'IFRAME') {
                     var hr = he.getBoundingClientRect();
                     try { he.contentWindow.postMessage({ tok: '\(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
                     return;
+                }
+
                 }
                 var t = he || v || document.body;
                 t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: hx, clientY: hy }));
