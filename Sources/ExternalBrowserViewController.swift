@@ -455,19 +455,24 @@ windowContentHolder.addSubview(youtubeWebView)
 windowContentHolder.addSubview(netflixWebView)
 windowContentHolder.addSubview(chromeWebView)
 }
-@objc private func closeActiveWindow() {
-    pauseAllMediaOnBackground()
-    saveSession()
-    closedModes.insert(currentMode)
-    UIView.animate(withDuration: 0.18, animations: {
-        self.appWindowContainer.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
-        self.appWindowContainer.alpha = 0
-    }) { _ in
-        self.appWindowContainer.transform = .identity
-        self.appWindowContainer.alpha = 1
-        self.showDesktop()
+    @objc private func closeActiveWindow() {
+        pauseAllMediaOnBackground()
+        saveSession()
+        if let activeWV = activeWebView, let blankURL = URL(string: "about:blank") {
+            activeWV.stopLoading()
+            activeWV.load(URLRequest(url: blankURL))
+        }
+        closedModes.insert(currentMode)
+        UIView.animate(withDuration: 0.18, animations: {
+            self.appWindowContainer.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
+            self.appWindowContainer.alpha = 0
+        }) { _ in
+            self.appWindowContainer.transform = .identity
+            self.appWindowContainer.alpha = 1
+            self.showDesktop()
+        }
     }
-}
+
 
 @objc private func minimizeActiveWindow() { showDesktop() }
 @objc private func toggleWindowMaxSize() {
@@ -676,11 +681,11 @@ chromeWebView.isHidden = true
 updateDockIndicators()
 view.setNeedsLayout()
 view.layoutIfNeeded()
-if youtubeWebView.url == nil {
+if youtubeWebView.url == nil || youtubeWebView.url?.absoluteString == "about:blank" {
     let savedYT = UserDefaults.standard.string(forKey: "savedYouTubeURL") ?? "https://youtube.com"
-loadFresh(savedYT, into: youtubeWebView)
-
+    loadFresh(savedYT, into: youtubeWebView)
 }
+
 }
     
 @objc func launchNetflix() {
@@ -700,10 +705,10 @@ chromeWebView.isHidden = true
 updateDockIndicators()
 view.setNeedsLayout()
 view.layoutIfNeeded()
-if netflixWebView.url == nil {
+if netflixWebView.url == nil || netflixWebView.url?.absoluteString == "about:blank" {
     loadFresh("https://netflix.com", into: netflixWebView)
-
 }
+
 }
 @objc func launchChromeDefault() { openInChrome(urlString: nil) }
 func openInChrome(urlString: String?) {
@@ -733,9 +738,10 @@ rebuildMonitorChromeTabs()
 loadFresh(target, into: chromeWebView)
 } else {
 rebuildMonitorChromeTabs()
-if chromeWebView.url == nil {
-loadFresh(chromeTabURLs[activeChromeTab], into: chromeWebView)
+if chromeWebView.url == nil || chromeWebView.url?.absoluteString == "about:blank" {
+    loadFresh(chromeTabURLs[activeChromeTab], into: chromeWebView)
 }
+
 }
 }
 func addChromeTab(urlString: String = "https://google.com") {
