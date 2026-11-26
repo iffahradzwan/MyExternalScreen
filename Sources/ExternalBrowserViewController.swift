@@ -97,7 +97,6 @@ private func restoreSession() {
 
         youtubeWebView.uiDelegate = self
         netflixWebView.uiDelegate = self
-        chromeWebView.uiDelegate = self
 
         
         setupAppWindow()
@@ -782,6 +781,7 @@ func addChromeTab(urlString: String = "https://google.com") {
     activeChromeTab = chromeWebViews.count - 1
     openInChrome(urlString: urlString)
 }
+    
 
 func switchChromeTab(index: Int) {
     guard chromeTabURLs.indices.contains(index) else { return }
@@ -924,14 +924,4 @@ func toggleFullscreen() {
 }
 
 }
-    func addChromeTab(urlString: String = "https://google.com") {
-        let newWV = WebEngine.makeWebView(delegate: self, isDesktop: true)
-        newWV.uiDelegate = self
-        newWV.frame = windowContentHolder.bounds
-        windowContentHolder.addSubview(newWV)
-        chromeWebViews.append(newWV)
-        chromeTabURLs.append(urlString)
-        chromeTabTitles.append("Loading...")
-        activeChromeTab = chromeWebViews.count - 1
-        openInChrome(urlString: urlString)
-    }
+   
