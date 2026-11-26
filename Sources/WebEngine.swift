@@ -111,9 +111,163 @@ final class WebEngine {
         let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
         let s12 = "if(ad&&v){v.muted=true;if(isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration;}if(v.playbackRate!==16){v.playbackRate=16;}if(v.paused)v.play();}else if(v){if(v.playbackRate===16){v.playbackRate=1;if(v.paused)v.play();}if(!window.__userMuted&&v.muted){v.muted=false;v.volume=1;}}if(location.pathname.indexOf('/shorts/')===0){if(window.__lastShort!==location.pathname){window.__lastShort=location.pathname;setTimeout(function(){window.dispatchEvent(new Event('resize'));},150);}}else{window.__lastShort=null;}"
         let s13 = "},300);"
-       // JavaScript logic for iframe message handling, fullscreen toggling, and event dispatching for s14a and s14 is truncated for length.
-        let s14a = "/* iframe-fs and message listener logic */"
-        let s14 = "/* pointer, hover, and video control event dispatch logic */"
+        let s14 = """
+        window.addEventListener('message', function(e) {
+            var d = e.data;
+            if (!d || d.tok !== '\(msgToken)' || !d.cmd) return;
+            var v = document.querySelector('video');
+
+            if (d.cmd === 'iframe-fs') {
+                document.querySelectorAll('iframe').forEach(function(f) {
+                    if (f.contentWindow === e.source) {
+                        var pst = document.getElementById('if-parent-fs');
+                        if (d.val) {
+                            if (!pst) {
+                                pst = document.createElement('style');
+                                pst.id = 'if-parent-fs';
+                                pst.textContent = 'html,body{margin:0!important;padding:0!important;overflow:hidden!important;}iframe[data-if-fs="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:999999!important;background:#000!important;}';
+                                document.head.appendChild(pst);
+                            }
+                            f.setAttribute('data-if-fs', '1');
+                        } else {
+                            f.removeAttribute('data-if-fs');
+                            if (pst) pst.remove();
+                        }
+                    }
+                });
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ tok: '\(msgToken)', cmd: 'iframe-fs', val: d.val }, '*');
+                }
+                return;
+            }
+
+            if (d.cmd === 'click') {
+                var ce = document.elementFromPoint(d.x, d.y);
+                if (ce) {
+                    var r = ce.getBoundingClientRect();
+                    var inCorner = (r.right > window.innerWidth - 90 && r.bottom > window.innerHeight - 90);
+                    var fsBtn = ce.closest('.jw-icon-fullscreen,.plyr__control[data-plyr="fullscreen"],.vjs-fullscreen-control,.art-icon-fullscreen,[aria-label*="full" i],[title*="full" i],[class*="fullscreen" i]') || (inCorner ? ce.closest('button,[role=button],svg') : null);
+                    if (fsBtn && window.top !== window) {
+                        window.__isIfFs = !window.__isIfFs;
+                        var st = document.getElementById('if-fs');
+                        if (window.__isIfFs) {
+                            if (!st) {
+                                st = document.createElement('style');
+                                st.id = 'if-fs';
+                                st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
+                                document.head.appendChild(st);
+                            }
+                        } else if (st) {
+                            st.remove();
+                        }
+                        window.parent.postMessage({ tok: '\(msgToken)', cmd: 'iframe-fs', val: window.__isIfFs }, '*');
+                        return;
+                    }
+                    var bt = ce.closest('button,[role=button],a,li,input,label,[tabindex]') || ce;
+                    var po = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 };
+                    var mo = { view: window, bubbles: true, cancelable: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 };
+                    if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerdown', po));
+                    bt.dispatchEvent(new MouseEvent('mousedown', mo));
+                    if (window.PointerEvent) bt.dispatchEvent(new PointerEvent('pointerup', po));
+                    bt.dispatchEvent(new MouseEvent('mouseup', mo));
+                    bt.click();
+                }
+                return;
+            }
+
+            if (d.cmd === 'pause') {
+                document.querySelectorAll('video,audio').forEach(function(m) { m.pause(); });
+                document.querySelectorAll('iframe').forEach(function(f) {
+                    try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+                });
+                return;
+            }
+
+            if (d.cmd === 'fs') {
+                var st = document.getElementById('if-fs');
+                if (d.val) {
+                    if (!st) {
+                        st = document.createElement('style');
+                        st.id = 'if-fs';
+                        st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
+                        document.head.appendChild(st);
+                    }
+                } else if (st) {
+                    st.remove();
+                }
+                document.querySelectorAll('iframe').forEach(function(f) {
+                    try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+                });
+                return;
+            }
+
+            if (d.cmd === 'down') {
+                var de = document.elementFromPoint(d.x, d.y) || document.body;
+                window.__dragEl = de;
+                de.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
+                de.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
+                return;
+            }
+
+            if (d.cmd === 'move') {
+                var me = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
+                me.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
+                me.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
+                return;
+            }
+
+            if (d.cmd === 'up') {
+                var ue = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
+                ue.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
+                ue.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 0 }));
+                window.__dragEl = null;
+                return;
+            }
+
+            if (d.cmd === 'hover') {
+                var hx = d.x || 100, hy = d.y || 100;
+                var he = document.elementFromPoint(hx, hy);
+                if (window.__lastHoverEl && window.__lastHoverEl !== he) {
+                    window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he }));
+                    window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he }));
+                }
+                window.__lastHoverEl = he;
+                if (he && he.tagName === 'IFRAME') {
+                    var hr = he.getBoundingClientRect();
+                    try { he.contentWindow.postMessage({ tok: '\(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
+                    return;
+                }
+                var t = he || v || document.body;
+                t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: hx, clientY: hy }));
+                if (window.PointerEvent) t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hx, clientY: hy }));
+                var pl = document.querySelector('.jwplayer,.plyr,.video-js,.art-video-player');
+                if (pl) {
+                    pl.classList.remove('jw-flag-user-inactive', 'plyr--hide-controls', 'vjs-user-inactive', 'art-control-hide');
+                    pl.classList.add('jw-flag-user-active', 'vjs-user-active', 'art-hover');
+                    clearTimeout(window.__ifHide);
+                    window.__ifHide = setTimeout(function() {
+                        pl.classList.add('jw-flag-user-inactive', 'plyr--hide-controls', 'vjs-user-inactive');
+                        pl.classList.remove('jw-flag-user-active', 'vjs-user-active', 'art-hover');
+                    }, 2500);
+                }
+                return;
+            }
+
+            document.querySelectorAll('iframe').forEach(function(f) {
+                try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+            });
+
+            if (!v) return;
+            if (d.cmd === 'toggle') {
+                v.paused ? v.play() : v.pause();
+            } else if (d.cmd === 'skip' && isFinite(v.duration)) {
+                v.currentTime = Math.min(Math.max(0, v.currentTime + d.val), v.duration);
+            } else if (d.cmd === 'seek' && isFinite(v.duration)) {
+                v.currentTime = v.duration * d.val;
+            }
+        });
+        """
+
 
         let script = WKUserScript(
             source: s1 + s2 + s3 + s4 + s4b + s5 + s6 + s7 + s8 + s9 + s10 + s11 + s12 + s13 + s14,
