@@ -335,7 +335,7 @@ let s4b = "window.open=function(){return null;};"
         });
 """
         let script = WKUserScript(
-            source: s1 + s2 + s3 + s4 + s4b + s5a + s5b + s6 + s7a + s7b + s8 + s9 + s10 + s11 + s12 + s13 + s14,
+            source: s1 + s2 + s3 + s4b + s5a + s5b + s6 + s7a + s7b + s8 + s9 + s10 + s11 + s12 + s13 + s14,
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: false
         )
