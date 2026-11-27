@@ -912,14 +912,13 @@ onInput: { [weak self] existingText in self?.onInputSelected?(existingText) }
 )
 }
 func toggleFullscreen() {
-    guard let webView = activeWebView, currentMode != .desktop else {
-        isVideoZoomedFull.toggle()
-        applyFullscreenChrome(isVideoZoomedFull)
-        return
-    }
-    // Do NOT toggle local state here — let the page's fullscreenchange
-    // come back through the message handler as the single source of truth.
-    WebEngine.toggleSiteFullscreen(in: webView)
+    isVideoZoomedFull.toggle()
+    dockView.isHidden = isVideoZoomedFull
+    menuBar.isHidden = isVideoZoomedFull
+    windowTitleBar.isHidden = isVideoZoomedFull
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
+    WebEngine.toggleWebFullscreen(isFull: isVideoZoomedFull, in: activeWebView)
 }
 
 private func applyFullscreenChrome(_ full: Bool) {
