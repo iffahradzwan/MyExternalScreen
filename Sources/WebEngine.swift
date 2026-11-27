@@ -13,7 +13,6 @@ final class WebEngine {
         config.allowsPictureInPictureMediaPlayback = false
         config.mediaTypesRequiringUserActionForPlayback = []
 
-        // 1. EARLY AD-STRIPPING, VISIBILITY & PLAYSINLINE (.atDocumentStart)
         let e1 = "(function(){try{Object.defineProperty(document,'hidden',{get:function(){return false;}});Object.defineProperty(document,'webkitHidden',{get:function(){return false;}});Object.defineProperty(document,'visibilityState',{get:function(){return 'visible';}});Object.defineProperty(document,'webkitVisibilityState',{get:function(){return 'visible';}});document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation();},true);document.addEventListener('webkitvisibilitychange',function(e){e.stopImmediatePropagation();},true);}catch(e){}"
         let e2 = "var origCreate=document.createElement;document.createElement=function(tag,opt){var el=origCreate.call(this,tag,opt);if(typeof tag==='string'&&tag.toLowerCase()==='video'){el.setAttribute('playsinline','');el.setAttribute('webkit-playsinline','');el.playsInline=true;}return el;};var origShadow=Element.prototype.attachShadow;Element.prototype.attachShadow=function(init){var sr=origShadow.call(this,{mode:'open'});var st=document.createElement('style');st.textContent='media-slider-thumbnail,media-slider-preview,[part*=\"thumbnail\"],[part*=\"preview\"],[class*=\"thumbnail\"],[class*=\"preview\"]{display:none!important;opacity:0!important;}';sr.appendChild(st);return sr;};"
         let e3 = "function cleanAdData(o){if(!o||typeof o!=='object')return o;delete o.adPlacements;delete o.playerAds;delete o.adSlots;delete o.adBreakHeartbeatParams;return o;}"
@@ -26,7 +25,6 @@ final class WebEngine {
             WKUserScript(source: e1 + e2 + e3 + e4 + e5 + e6 + e7, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
 
-        // 2. NETWORK-LEVEL CONTENT BLOCKER
         let blockRules = """
         [
             {
@@ -55,17 +53,13 @@ final class WebEngine {
             }
         }
 
-        // 3. SAFETY OVERRIDES, FALLBACK SKIPPER, UNMUTER & IFRAME CONTROLS (.atDocumentEnd)
         let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){};"
         let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){};"
         let s3 = "window.__fsEl=null;try{Object.defineProperty(document,'fullscreenElement',{get:function(){return window.__fsEl;}});Object.defineProperty(document,'webkitFullscreenElement',{get:function(){return window.__fsEl;}});}catch(e){}Element.prototype.requestFullscreen=function(){if(window.top!==window){window.__fsEl=this;window.__isIfFs=true;document.dispatchEvent(new Event('fullscreenchange'));window.postMessage({tok:'\(msgToken)',cmd:'fs',val:true},'*');window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:true},'*');}return Promise.resolve();};"
         let s4 = "Element.prototype.webkitRequestFullscreen=Element.prototype.requestFullscreen;document.exitFullscreen=function(){if(window.top!==window){window.__fsEl=null;window.__isIfFs=false;document.dispatchEvent(new Event('fullscreenchange'));window.postMessage({tok:'\(msgToken)',cmd:'fs',val:false},'*');window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:false},'*');}return Promise.resolve();};document.webkitExitFullscreen=document.exitFullscreen;"
         let s4b = "window.open=function(){return null;};"
-        
-        // Relaxed CSS: Only hide YouTube ads, let Chrome players handle their own thumbnails
         let s5a = "var st=document.createElement('style');"
         let s5b = "st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container,.ytp-ad-module{display:none!important;visibility:hidden!important;opacity:0!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
-        
         let s6 = "window.__userMuted=false;document.addEventListener('click',function(e){if(e.target&&e.target.closest('.ytp-mute-button')){var v=document.querySelector('video');if(v)window.__userMuted=!v.muted;}},true);setInterval(function(){"
         let s7a = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
         let s7b = "if(window.top!==window&&document.querySelector('video')){document.querySelectorAll('*').forEach(function(el){if(el.shadowRoot&&!el.shadowRoot.getElementById('no-thumb')){var ss=document.createElement('style');ss.id='no-thumb';ss.textContent='media-slider-thumbnail,media-slider-preview,[part*=\"thumbnail\"],[part*=\"preview\"],[class*=\"thumbnail\"],[class*=\"preview\"]{display:none!important;opacity:0!important;}';el.shadowRoot.appendChild(ss);}});}"
@@ -75,7 +69,6 @@ final class WebEngine {
         let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
         let s12 = "if(ad&&v){v.muted=true;if(isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration;}if(v.playbackRate!==16){v.playbackRate=16;}if(v.paused)v.play();}else if(v){if(v.playbackRate===16){v.playbackRate=1;if(v.paused)v.play();}if(!window.__userMuted&&v.muted){v.muted=false;v.volume=1;}}if(location.pathname.indexOf('/shorts/')===0){if(window.__lastShort!==location.pathname){window.__lastShort=location.pathname;setTimeout(function(){window.dispatchEvent(new Event('resize'));},150);}}else{window.__lastShort=null;}"
         let s13 = "},300);"
-        
         let s14 = """
     window.addEventListener('message', function(e) {
         var d = e.data;
@@ -191,7 +184,7 @@ final class WebEngine {
             var he = document.elementFromPoint(hx, hy);
             var prev = window.__lastHoverEl;
             
-            // Properly dispatch mouseleave when moving away from an element
+            // Dispatch mouseleave when moving away from an element
             if (prev && prev !== he) {
                 var isChild = false;
                 var p = he;
@@ -202,12 +195,19 @@ final class WebEngine {
                 }
             }
             
-            // Specific logic for video sliders/scrubbers to hide thumbnails
-            var scrubberSelector = '.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,.scrubber-container,[class*="progress" i],[class*="timeline" i],[class*="scrubber" i]';
-            var currentScrubber = he ? he.closest(scrubberSelector) : null;
+            // Aggressive scrubber thumbnail hiding
+            var scrubberSelectors = '.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,.scrubber-container,.scrubber,.progress-bar,.progress-container,.timeline,.timeline-container,[class*="progress" i],[class*="timeline" i],[class*="scrubber" i],[class*="seek" i]';
+            var currentScrubber = he ? he.closest(scrubberSelectors) : null;
             var prevScrubber = window.__lastScrubber;
             
             if (prevScrubber && prevScrubber !== currentScrubber) {
+                // Force hide any visible thumbnails when leaving scrubber
+                var thumbnails = prevScrubber.querySelectorAll('[class*="preview" i],[class*="thumbnail" i],[class*="thumb" i],.jw-preview,.plyr__preview-thumb,.vjs-thumbnail,.art-progress-tip');
+                thumbnails.forEach(function(thumb) {
+                    thumb.style.display = 'none';
+                    thumb.style.opacity = '0';
+                    thumb.style.visibility = 'hidden';
+                });
                 prevScrubber.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy }));
                 prevScrubber.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy }));
             }
@@ -216,6 +216,15 @@ final class WebEngine {
                 currentScrubber.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: hx, clientY: hy }));
             }
             window.__lastScrubber = currentScrubber;
+            
+            // Also hide any floating thumbnails when not over a scrubber
+            if (!currentScrubber) {
+                document.querySelectorAll('[class*="preview-thumb" i],[class*="scrubber-preview" i],[class*="hover-preview" i],.jw-preview,.plyr__preview-thumb,.vjs-thumbnail,.art-progress-tip').forEach(function(thumb) {
+                    thumb.style.display = 'none';
+                    thumb.style.opacity = '0';
+                    thumb.style.visibility = 'hidden';
+                });
+            }
             
             window.__lastHoverEl = he;
             
