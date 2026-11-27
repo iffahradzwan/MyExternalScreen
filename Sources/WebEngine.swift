@@ -26,39 +26,39 @@ final class WebEngine {
             WKUserScript(source: e1 + e2 + e3 + e4 + e5 + e6 + e7, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
 
-    // 2. NETWORK-LEVEL CONTENT BLOCKER
-    let blockRules = """
-    [
-        {
-            "trigger": {
-                "url-filter": ".*(doubleclick\\\\.net|googlesyndication\\\\.com|googleadservices\\\\.com|youtube\\\\.com/pagead/|youtube\\\\.com/api/stats/ads).*"
+        // 2. NETWORK-LEVEL CONTENT BLOCKER
+        let blockRules = """
+        [
+            {
+                "trigger": {
+                    "url-filter": ".*(doubleclick.net|googlesyndication.com|googleadservices.com|youtube.com/pagead/|youtube.com/api/stats/ads).*"
+                },
+                "action": { "type": "block" }
             },
-            "action": { "type": "block" }
-        },
-        {
-            "trigger": { "url-filter": ".*youtube\\\\.com.*" },
-            "action": {
-                "type": "css-display-none",
-                "selector": "ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer, ytd-banner-promo-renderer, #masthead-ad, .ytp-ad-module, .ytp-ad-overlay-container"
+            {
+                "trigger": { "url-filter": ".*youtube.com.*" },
+                "action": {
+                    "type": "css-display-none",
+                    "selector": "ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer, ytd-banner-promo-renderer, #masthead-ad, .ytp-ad-module, .ytp-ad-overlay-container"
+                }
+            }
+        ]
+        """
+        WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: "PeekabooAdBlocker",
+            encodedContentRuleList: blockRules
+        ) { ruleList, _ in
+            if let ruleList = ruleList {
+                DispatchQueue.main.async {
+                    config.userContentController.add(ruleList)
+                }
             }
         }
-    ]
-    """
-    WKContentRuleListStore.default().compileContentRuleList(
-        forIdentifier: "PeekabooAdBlocker",
-        encodedContentRuleList: blockRules
-    ) { ruleList, _ in
-        if let ruleList = ruleList {
-            DispatchQueue.main.async {
-                config.userContentController.add(ruleList)
-            }
-        }
-    }
 
-    // 3. SAFETY OVERRIDES, FALLBACK SKIPPER, UNMUTER & IFRAME CONTROLS (.atDocumentEnd)
-    let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){try{this.requestFullscreen();}catch(e){}};"
-let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){try{this.requestFullscreen();}catch(e){}};"
-let s3 = """
+        // 3. SAFETY OVERRIDES, FALLBACK SKIPPER, UNMUTER & IFRAME CONTROLS (.atDocumentEnd)
+        let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){try{this.requestFullscreen();}catch(e){}};"
+        let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){try{this.requestFullscreen();}catch(e){}};"
+        let s3 = """
 window.__fsEl=null;
 try{Object.defineProperty(document,'fullscreenElement',{get:function(){return window.__fsEl;},configurable:true});
 Object.defineProperty(document,'webkitFullscreenElement',{get:function(){return window.__fsEl;},configurable:true});
@@ -96,25 +96,25 @@ document.exitFullscreen=function(){
 };
 document.webkitExitFullscreen=document.exitFullscreen;
 """
-    let s4b = "window.open=function(){return null;};"
-    let s5a = "var st=document.createElement('style');"
-    let s5b = "st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container,.art-progress-tip,.jw-preview,.jw-tooltip-time,.plyr__preview-thumb,.vds-thumbnail,[data-part*=\"thumbnail\" i],[class*=\"preview\" i]:not([class*=\"yt\" i]){display:none!important;visibility:hidden!important;opacity:0!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
-    let s6 = "window.__userMuted=false;document.addEventListener('click',function(e){if(e.target&&e.target.closest('.ytp-mute-button')){var v=document.querySelector('video');if(v)window.__userMuted=!v.muted;}},true);setInterval(function(){"
-    let s7a = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
-    let s7b = "window.__killThumbs = function (root) { try { root.querySelectorAll('*').forEach(function (el) { if (el.shadowRoot) { if (!el.shadowRoot.getElementById('no-thumb')) { var ss = document.createElement('style'); ss.id = 'no-thumb'; ss.textContent = 'media-slider-thumbnail,media-slider-preview,[part*=\\\"thumbnail\\\"],[part*=\\\"preview\\\"],[class*=\\\"thumbnail\\\"],[class*=\\\"preview\\\"],[class*=\\\"hover-preview\\\" i],[class*=\\\"scrubber-preview\\\" i],[class*=\\\"preview-thumb\\\" i]{display:none!important;opacity:0!important;pointer-events:none!important;}'; el.shadowRoot.appendChild(ss); } window.__killThumbs(el.shadowRoot); } }); } catch (e) {} };";
-    let s8 = "var skipBtns=document.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text,.ytp-ad-overlay-close-button');"
-    let s9 = "skipBtns.forEach(function(s){if(window.PointerEvent){s.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));s.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));}s.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));s.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));s.click();});"
-    let s10 = "var ad=document.querySelector('.ad-showing,.ad-interrupting');"
-    let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
-    let s12 = "if(ad&&v){v.muted=true;if(isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration;}if(v.playbackRate!==16){v.playbackRate=16;}if(v.paused)v.play();}else if(v){if(v.playbackRate===16){v.playbackRate=1;if(v.paused)v.play();}if(!window.__userMuted&&v.muted){v.muted=false;v.volume=1;}}if(location.pathname.indexOf('/shorts/')===0){if(window.__lastShort!==location.pathname){window.__lastShort=location.pathname;setTimeout(function(){window.dispatchEvent(new Event('resize'));},150);}}else{window.__lastShort=null;}"
-    let s13 = "},300);"
-    let s14 = """
+        let s4b = "window.open=function(){return null;};"
+        let s5a = "var st=document.createElement('style');"
+        let s5b = "st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container,.art-progress-tip,.jw-preview,.jw-tooltip-time,.plyr__preview-thumb,.vds-thumbnail,[data-part*=\"thumbnail\" i],[class*=\"preview\" i]:not([class*=\"yt\" i]){display:none!important;visibility:hidden!important;opacity:0!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
+        let s6 = "window.__userMuted=false;document.addEventListener('click',function(e){if(e.target&&e.target.closest('.ytp-mute-button')){var v=document.querySelector('video');if(v)window.__userMuted=!v.muted;}},true);setInterval(function(){"
+        let s7a = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
+        let s7b = "window.__killThumbs = function (root) { try { root.querySelectorAll('*').forEach(function (el) { if (el.shadowRoot) { if (!el.shadowRoot.getElementById('no-thumb')) { var ss = document.createElement('style'); ss.id = 'no-thumb'; ss.textContent = 'media-slider-thumbnail,media-slider-preview,[part*=\\\"thumbnail\\\"],[part*=\\\"preview\\\"],[class*=\\\"thumbnail\\\"],[class*=\\\"preview\\\"],[class*=\\\"hover-preview\\\" i],[class*=\\\"scrubber-preview\\\" i],[class*=\\\"preview-thumb\\\" i]{display:none!important;opacity:0!important;pointer-events:none!important;}'; el.shadowRoot.appendChild(ss); } window.__killThumbs(el.shadowRoot); } }); } catch (e) {} };"
+        let s8 = "var skipBtns=document.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text,.ytp-ad-overlay-close-button');"
+        let s9 = "skipBtns.forEach(function(s){if(window.PointerEvent){s.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));s.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));}s.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));s.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));s.click();});"
+        let s10 = "var ad=document.querySelector('.ad-showing,.ad-interrupting');"
+        let s11 = "var v=document.querySelector('#movie_player video,.html5-main-video');"
+        let s12 = "if(ad&&v){v.muted=true;if(isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration;}if(v.playbackRate!==16){v.playbackRate=16;}if(v.paused)v.play();}else if(v){if(v.playbackRate===16){v.playbackRate=1;if(v.paused)v.play();}if(!window.__userMuted&&v.muted){v.muted=false;v.volume=1;}}if(location.pathname.indexOf('/shorts/')===0){if(window.__lastShort!==location.pathname){window.__lastShort=location.pathname;setTimeout(function(){window.dispatchEvent(new Event('resize'));},150);}}else{window.__lastShort=null;}"
+        let s13 = "},300);"
+        let s14 = """
     window.addEventListener('message', function(e) {
         var d = e.data;
         if (!d || d.tok !== '\(msgToken)' || !d.cmd) return;
         var v = document.querySelector('video');
 
-              if (d.cmd === 'iframe-fs') {
+        if (d.cmd === 'iframe-fs') {
             var st = document.getElementById('if-fs');
             if (d.val) {
                 if (!st) {
@@ -127,24 +127,24 @@ document.webkitExitFullscreen=document.exitFullscreen;
                 st.remove();
             }
             document.querySelectorAll('iframe').forEach(function(f) {
-    if (f.contentWindow === e.source) {
-        var pst = document.getElementById('if-parent-fs');
-        if (d.val) {
-            if (!pst) {
-                pst = document.createElement('style');
-                pst.id = 'if-parent-fs';
-                pst.textContent = 'html,body{margin:0!important;padding:0!important;overflow:hidden!important;}iframe[data-if-fs="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:999999!important;background:#000!important;}';
-                document.head.appendChild(pst);
-            }
-            f.setAttribute('data-if-fs', '1');
-            window.__fsEl = f;
-        } else {
-            f.removeAttribute('data-if-fs');
-            if (pst) pst.remove();
-            window.__fsEl = null;
-        }
-    }
-});
+                if (f.contentWindow === e.source) {
+                    var pst = document.getElementById('if-parent-fs');
+                    if (d.val) {
+                        if (!pst) {
+                            pst = document.createElement('style');
+                            pst.id = 'if-parent-fs';
+                            pst.textContent = 'html,body{margin:0!important;padding:0!important;overflow:hidden!important;}iframe[data-if-fs="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:999999!important;background:#000!important;}';
+                            document.head.appendChild(pst);
+                        }
+                        f.setAttribute('data-if-fs', '1');
+                        window.__fsEl = f;
+                    } else {
+                        f.removeAttribute('data-if-fs');
+                        if (pst) pst.remove();
+                        window.__fsEl = null;
+                    }
+                }
+            });
             if (window.parent && window.parent !== window) {
                 window.parent.postMessage({ tok: '\(msgToken)', cmd: 'iframe-fs', val: d.val }, '*');
             } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fullscreenToggle) {
@@ -153,8 +153,7 @@ document.webkitExitFullscreen=document.exitFullscreen;
             return;
         }
 
-
-               if (d.cmd === 'click') {
+        if (d.cmd === 'click') {
             var ce = document.elementFromPoint(d.x, d.y);
             if (ce) {
                 var bt = ce.closest('button,[role=button],a,li,input,label,[tabindex]') || ce;
@@ -169,178 +168,171 @@ document.webkitExitFullscreen=document.exitFullscreen;
             return;
         }
 
-                            if (d.cmd === 'pause') {
-                            document.querySelectorAll('video,audio').forEach(function(m) { m.pause(); });
-                            document.querySelectorAll('iframe').forEach(function(f) {
-                            try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
-                            });
-                            return;
-                            }
-             if (d.cmd === 'fs') {
-                window.__isIfFs = Boolean(d.val);
-                if (!d.val && window.__fsEl) {
-                    window.__fsEl = null;
-                    document.dispatchEvent(new Event('fullscreenchange'));
-                }
-                var st = document.getElementById('if-fs');
-                if (d.val) {
-                    if (!st) {
-                        st = document.createElement('style');
-                        st.id = 'if-fs';
-                        st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;background:#000!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;min-width:100vw!important;min-height:100vh!important;transform:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
-                        document.head.appendChild(st);
-                    }
-                } else {
-                    if (st) st.remove();
-                    var pst = document.getElementById('if-parent-fs');
-                    if (pst) pst.remove();
-                    document.querySelectorAll('iframe[data-if-fs]').forEach(function(f) { f.removeAttribute('data-if-fs'); });
-                }
-
-                // Sync web player's own fullscreen button icon/state
-                var pl = document.querySelector('.jwplayer,.plyr,.video-js,.art-video-player,media-player,#movie_player');
-                var alreadyFs = Boolean(window.__fsEl) || (pl && (
-                    pl.classList.contains('jw-flag-fullscreen') ||
-                    pl.classList.contains('plyr--fullscreen-active') ||
-                    pl.classList.contains('vjs-fullscreen') ||
-                    pl.classList.contains('art-fullscreen') ||
-                    pl.hasAttribute('data-fullscreen')
-                ));
-                if (Boolean(d.val) !== alreadyFs) {
-                    var fsBtn = document.querySelector('.ytp-fullscreen-button,.jw-icon-fullscreen,.plyr__control[data-plyr="fullscreen"],.vjs-fullscreen-control,.art-icon-fullscreen,media-fullscreen-button,[aria-label*="full screen" i],[aria-label*="fullscreen" i],[title*="full screen" i],[title*="fullscreen" i]');
-                    if (!fsBtn) {
-                        document.querySelectorAll('*').forEach(function(el) {
-                            if (!fsBtn && el.shadowRoot) {
-                                fsBtn = el.shadowRoot.querySelector('media-fullscreen-button,[part*="fullscreen"],[aria-label*="fullscreen" i],[aria-label*="full screen" i]');
-                            }
-                        });
-                    }
-                   if (fsBtn) { fsBtn.click(); } else {
-    var tgt = document.querySelector('video,media-player,.player-player-container,.jwplayer,.plyr,.video-js,.art-video-player,#movie_player') || document.documentElement;
-    tgt.requestFullscreen();
-}
-                }
-
-                document.querySelectorAll('iframe').forEach(function(f) {
-                    try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
-                });
-                return;
-            }
-
-                            if (d.cmd === 'down') {
-                            var de = document.elementFromPoint(d.x, d.y) || document.body;
-                            window.__dragEl = de;
-                            de.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
-                            de.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
-                            return;
-                            }
-                            if (d.cmd === 'move') {
-                            var me = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
-                            me.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
-                            me.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
-                            return;
-                            }
-                            if (d.cmd === 'up') {
-                            var ue = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
-                            ue.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
-                            ue.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 0 }));
-                            window.__dragEl = null;
-                            return;
-                            }
-                           if (d.cmd === 'hover') {
-    var hx = d.x || 100, hy = d.y || 100;
-    var he = document.elementFromPoint(hx, hy);
-    var prev = window.__lastHoverEl;
-    if (prev && prev !== he) {
-        // build ancestor chains
-        var oldPath = [], n = prev; while (n) { oldPath.push(n); n = n.parentElement; }
-        var newPath = [], m = he;   while (m) { newPath.push(m); m = m.parentElement; }
-        var newSet = new Set(newPath), common = null;
-        for (var i = 0; i < oldPath.length; i++) { if (newSet.has(oldPath[i])) { common = oldPath[i]; break; } }
-        // fire out/leave UP the old chain until the common ancestor
-        for (var i = 0; i < oldPath.length; i++) { var el = oldPath[i]; if (el === common) break;
-            el.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he }));
-            el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he }));
-            if (window.PointerEvent) {
-                el.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he, pointerId: 1 }));
-                el.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he, pointerId: 1 }));
-            }
+        if (d.cmd === 'pause') {
+            document.querySelectorAll('video,audio').forEach(function(m) { m.pause(); });
+            document.querySelectorAll('iframe').forEach(function(f) {
+                try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+            });
+            return;
         }
-        // fire over/enter DOWN the new chain
-        for (var i = newPath.length - 1; i >= 0; i--) { var el = newPath[i]; if (el === common) break;
-            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: prev }));
-            el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: prev }));
-            if (window.PointerEvent) {
-                el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: prev, pointerId: 1 }));
-                el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: prev, pointerId: 1 }));
+
+        if (d.cmd === 'fs') {
+            window.__isIfFs = Boolean(d.val);
+            if (!d.val && window.__fsEl) {
+                window.__fsEl = null;
+                document.dispatchEvent(new Event('fullscreenchange'));
             }
-        }
-    }
-    window.__lastHoverEl = he;
-
-    // scrubber-specific leave when the cursor is not over a progress bar
-    var onProg = he && he.closest('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]');
-    if (!onProg) {
-        document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]').forEach(function (p) {
-            p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy }));
-            p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy }));
-            if (window.PointerEvent) { p.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerId: 1 })); }
-        });
-    }
-
-    if (he && he.tagName === 'IFRAME') {
-        var hr = he.getBoundingClientRect();
-        try { he.contentWindow.postMessage({ tok: '\(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
-        return;
-    }
-
-    var t = he || v || document.body;
-    t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: hx, clientY: hy }));
-    if (window.PointerEvent) t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hx, clientY: hy }));
-
-    // IDLE WATCHDOG: if no hover event for 2s (finger lifted / stopped),
-    // tell the page the mouse actually left — this kills stuck previews & lets controls auto-hide
-    clearTimeout(window.__hoverIdle);
-    window.__hoverIdle = setTimeout(function () {
-        var el = window.__lastHoverEl;
-        while (el) {
-            el.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
-            el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, relatedTarget: document.body }));
-            if (window.PointerEvent) {
-                el.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerId: 1 }));
-                el.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerId: 1 }));
+            var st = document.getElementById('if-fs');
+            if (d.val) {
+                if (!st) {
+                    st = document.createElement('style');
+                    st.id = 'if-fs';
+                    st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;background:#000!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;min-width:100vw!important;min-height:100vh!important;transform:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
+                    document.head.appendChild(st);
+                }
+            } else {
+                if (st) st.remove();
+                var pst = document.getElementById('if-parent-fs');
+                if (pst) pst.remove();
+                document.querySelectorAll('iframe[data-if-fs]').forEach(function(f) { f.removeAttribute('data-if-fs'); });
             }
-            el = el.parentElement;
-        }
-        document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]').forEach(function (p) {
-            p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false }));
-            p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
-        });
-        window.__lastHoverEl = null;
-    }, 2000);
-}
-                            document.querySelectorAll('iframe').forEach(function(f) {
-                            try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
-                            });
-                            if (!v) return;
-                                                   if (d.cmd === 'toggle') {
-                var pb = document.querySelector('.vds-play-button,.art-control-playAndPause,.jw-icon-playback,.plyr__control[data-plyr="play"],.vjs-play-control,[aria-label*="play" i],[aria-label*="pause" i]');
-                if (!pb) {
+
+            var pl = document.querySelector('.jwplayer,.plyr,.video-js,.art-video-player,media-player,#movie_player');
+            var alreadyFs = Boolean(window.__fsEl) || (pl && (
+                pl.classList.contains('jw-flag-fullscreen') ||
+                pl.classList.contains('plyr--fullscreen-active') ||
+                pl.classList.contains('vjs-fullscreen') ||
+                pl.classList.contains('art-fullscreen') ||
+                pl.hasAttribute('data-fullscreen')
+            ));
+            if (Boolean(d.val) !== alreadyFs) {
+                var fsBtn = document.querySelector('.ytp-fullscreen-button,.jw-icon-fullscreen,.plyr__control[data-plyr="fullscreen"],.vjs-fullscreen-control,.art-icon-fullscreen,media-fullscreen-button,[aria-label*="full screen" i],[aria-label*="fullscreen" i],[title*="full screen" i],[title*="fullscreen" i]');
+                if (!fsBtn) {
                     document.querySelectorAll('*').forEach(function(el) {
-                        if (!pb && el.shadowRoot) {
-                            pb = el.shadowRoot.querySelector('.vds-play-button,.art-control-playAndPause,[part*="play"],[aria-label*="play" i],[aria-label*="pause" i]');
+                        if (!fsBtn && el.shadowRoot) {
+                            fsBtn = el.shadowRoot.querySelector('media-fullscreen-button,[part*="fullscreen"],[aria-label*="fullscreen" i],[aria-label*="full screen" i]');
                         }
                     });
                 }
-                if (pb) { pb.click(); } else { v.paused ? v.play() : v.pause(); }
-
-
-                            } else if (d.cmd === 'skip' && isFinite(v.duration)) {
-                            v.currentTime = Math.min(Math.max(0, v.currentTime + d.val), v.duration);
-                                       } else if (d.cmd === 'seek' && isFinite(v.duration)) {
-                v.currentTime = v.duration * d.val;
+                if (fsBtn) { fsBtn.click(); } else {
+                    var tgt = document.querySelector('video,media-player,.player-player-container,.jwplayer,.plyr,.video-js,.art-video-player,#movie_player') || document.documentElement;
+                    tgt.requestFullscreen();
+                }
             }
+
+            document.querySelectorAll('iframe').forEach(function(f) {
+                try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+            });
+            return;
+        }
+
+        if (d.cmd === 'down') {
+            var de = document.elementFromPoint(d.x, d.y) || document.body;
+            window.__dragEl = de;
+            de.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
+            de.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
+            return;
+        }
+        if (d.cmd === 'move') {
+            var me = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
+            me.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
+            me.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 1 }));
+            return;
+        }
+        if (d.cmd === 'up') {
+            var ue = window.__dragEl || document.elementFromPoint(d.x, d.y) || document.body;
+            ue.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: d.x, clientY: d.y, pointerId: 1 }));
+            ue.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: d.x, clientY: d.y, button: 0, buttons: 0 }));
+            window.__dragEl = null;
+            return;
+        }
+        if (d.cmd === 'hover') {
+            var hx = d.x || 100, hy = d.y || 100;
+            var he = document.elementFromPoint(hx, hy);
+            var prev = window.__lastHoverEl;
+            if (prev && prev !== he) {
+                var oldPath = [], n = prev; while (n) { oldPath.push(n); n = n.parentElement; }
+                var newPath = [], m = he;   while (m) { newPath.push(m); m = m.parentElement; }
+                var newSet = new Set(newPath), common = null;
+                for (var i = 0; i < oldPath.length; i++) { if (newSet.has(oldPath[i])) { common = oldPath[i]; break; } }
+                for (var i = 0; i < oldPath.length; i++) { var el = oldPath[i]; if (el === common) break;
+                    el.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he }));
+                    el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he }));
+                    if (window.PointerEvent) {
+                        el.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he, pointerId: 1 }));
+                        el.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he, pointerId: 1 }));
+                    }
+                }
+                for (var i = newPath.length - 1; i >= 0; i--) { var el = newPath[i]; if (el === common) break;
+                    el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: prev }));
+                    el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: prev }));
+                    if (window.PointerEvent) {
+                        el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: prev, pointerId: 1 }));
+                        el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: prev, pointerId: 1 }));
+                    }
+                }
+            }
+            window.__lastHoverEl = he;
+
+            var onProg = he && he.closest('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]');
+            if (!onProg) {
+                document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]').forEach(function (p) {
+                    p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy }));
+                    p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy }));
+                    if (window.PointerEvent) { p.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerId: 1 })); }
+                });
+            }
+
+            if (he && he.tagName === 'IFRAME') {
+                var hr = he.getBoundingClientRect();
+                try { he.contentWindow.postMessage({ tok: '\(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
+                return;
+            }
+
+            var t = he || v || document.body;
+            t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: hx, clientY: hy }));
+            if (window.PointerEvent) t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hx, clientY: hy }));
+
+            clearTimeout(window.__hoverIdle);
+            window.__hoverIdle = setTimeout(function () {
+                var el = window.__lastHoverEl;
+                while (el) {
+                    el.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+                    el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, relatedTarget: document.body }));
+                    if (window.PointerEvent) {
+                        el.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerId: 1 }));
+                        el.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerId: 1 }));
+                    }
+                    el = el.parentElement;
+                }
+                document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]').forEach(function (p) {
+                    p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false }));
+                    p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+                });
+                window.__lastHoverEl = null;
+            }, 2000);
+        }
+        document.querySelectorAll('iframe').forEach(function(f) {
+            try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
         });
+        if (!v) return;
+
+        if (d.cmd === 'toggle') {
+            var pb = document.querySelector('.vds-play-button,.art-control-playAndPause,.jw-icon-playback,.plyr__control[data-plyr="play"],.vjs-play-control,[aria-label*="play" i],[aria-label*="pause" i]');
+            if (!pb) {
+                document.querySelectorAll('*').forEach(function(el) {
+                    if (!pb && el.shadowRoot) {
+                        pb = el.shadowRoot.querySelector('.vds-play-button,.art-control-playAndPause,[part*="play"],[aria-label*="play" i],[aria-label*="pause" i]');
+                    }
+                });
+            }
+            if (pb) { pb.click(); } else { v.paused ? v.play() : v.pause(); }
+        } else if (d.cmd === 'skip' && isFinite(v.duration)) {
+            v.currentTime = Math.min(Math.max(0, v.currentTime + d.val), v.duration);
+        } else if (d.cmd === 'seek' && isFinite(v.duration)) {
+            v.currentTime = v.duration * d.val;
+        }
+    });
 """
         let script = WKUserScript(
             source: s1 + s2 + s3 + s4b + s5a + s5b + s6 + s7a + s7b + s8 + s9 + s10 + s11 + s12 + s13 + s14,
@@ -348,37 +340,38 @@ document.webkitExitFullscreen=document.exitFullscreen;
             forMainFrameOnly: false
         )
 
-                            config.userContentController.addUserScript(script)
-                            let wv = WKWebView(frame: .zero, configuration: config)
-                                wv.navigationDelegate = delegate
-                                   wv.customUserAgent = isDesktop
+        config.userContentController.addUserScript(script)
+        let wv = WKWebView(frame: .zero, configuration: config)
+        wv.navigationDelegate = delegate
+        wv.customUserAgent = isDesktop
             ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
             : "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 
-                            wv.backgroundColor = .black
-                            wv.isOpaque = true
-                            wv.scrollView.contentInsetAdjustmentBehavior = .never
-                            return wv
-                            }
+        wv.backgroundColor = .black
+        wv.isOpaque = true
+        wv.scrollView.contentInsetAdjustmentBehavior = .never
+        return wv
+    }
+
     static func pauseAllMedia(in webViews: [WKWebView?]) {
         let js = "document.querySelectorAll('video,audio').forEach(function(m){m.pause();});document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'pause'},'*');}catch(e){}});"
         webViews.forEach { $0?.evaluateJavaScript(js, completionHandler: nil) }
     }
-    
+
     static func clickAt(point: CGPoint, in webView: WKWebView, onFullscreen: @escaping () -> Void, onInput: @escaping (String) -> Void) {
-       let px = String(Double(point.x))
+        let px = String(Double(point.x))
         let py = String(Double(point.y))
         let txtSel = "textarea,input:not([type=hidden]):not([type=file]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio])"
-        
+
         let c1 = "(function(){var doc=document;var x=" + px + ";var y=" + py + ";"
         let c2 = "var el=doc.elementFromPoint(x,y);"
-       let c3 = "while(el&&el.tagName==='IFRAME'){var r=el.getBoundingClientRect();x-=r.left;y-=r.top;try{doc=el.contentDocument;if(!doc)throw 1;el=doc.elementFromPoint(x,y);}catch(e){try{el.contentWindow.postMessage({tok:'\(msgToken)',cmd:'click',x:x,y:y},'*');}catch(e2){}return {isInput:false,hitFullscreen:false};}}"
+        let c3 = "while(el&&el.tagName==='IFRAME'){var r=el.getBoundingClientRect();x-=r.left;y-=r.top;try{doc=el.contentDocument;if(!doc)throw 1;el=doc.elementFromPoint(x,y);}catch(e){try{el.contentWindow.postMessage({tok:'\(msgToken)',cmd:'click',x:x,y:y},'*');}catch(e2){}return {isInput:false,hitFullscreen:false};}}"
         let c4 = "if(!el)return null;"
         let c5 = "var inp=el.matches('" + txtSel + "')?el:el.closest('" + txtSel + "');"
         let c6 = "if(!inp&&!el.closest('button,[role=button],a,[role=option],li')){var box=el.closest('[role=search],[role=combobox],.RNNXgb,.ytSearchboxComponentInputBox');if(box){inp=box.querySelector('" + txtSel + "');}}"
         let c7 = "if(inp){window.__lastFocusedInput=inp;inp.focus();return {isInput:true,val:(inp.value||'')};}"
         let c8 = "window.__lastFocusedInput=null;"
-       let c9 = "var isFsBtn=Boolean(el.closest('.ytp-fullscreen-button,.fullscreen-icon,.jw-icon-fullscreen,.plyr__control[data-plyr=\\\"fullscreen\\\"],.vjs-fullscreen-control,.art-icon-fullscreen,[aria-label*=\\\"full screen\\\" i],[aria-label*=\\\"fullscreen\\\" i],[title*=\\\"fullscreen\\\" i],[title*=\\\"full screen\\\" i]'));"
+        let c9 = "var isFsBtn=Boolean(el.closest('.ytp-fullscreen-button,.fullscreen-icon,.jw-icon-fullscreen,.plyr__control[data-plyr=\\\"fullscreen\\\"],.vjs-fullscreen-control,.art-icon-fullscreen,[aria-label*=\\\"full screen\\\" i],[aria-label*=\\\"fullscreen\\\" i],[title*=\\\"fullscreen\\\" i],[title*=\\\"full screen\\\" i]'));"
         let c10 = "var t=el.closest('a,button,[role=button],[role=option],[role=tab],[role=link],[role=menuitem],[role=menuitemradio],[role=menuitemcheckbox],.ytp-menuitem,li,select,label,yt-formatted-string,ytd-thumbnail')||el;"
         let c11 = "if(t.focus){t.focus();}"
         let c12 = "var po={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:1,pointerType:'mouse',isPrimary:true,button:0,buttons:1};"
@@ -390,7 +383,7 @@ document.webkitExitFullscreen=document.exitFullscreen;
         let c18 = "t.dispatchEvent(new MouseEvent('click',mo));"
         let c19 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0&&t.target!=='_blank'){window.location.href=t.href;}"
         let c20 = "return {isInput:false,hitFullscreen:(isFsBtn&&!window.__fsEl)};})();"
-        
+
         webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20) { res, _ in
             guard let dict = res as? [String: Any] else { return }
             if let hitFS = dict["hitFullscreen"] as? Bool, hitFS {
@@ -402,8 +395,6 @@ document.webkitExitFullscreen=document.exitFullscreen;
             }
         }
     }
-
-
 
     private static func sendDrag(cmd: String, pe: String, me: String, point: CGPoint, in webView: WKWebView?) {
         let x = Double(point.x)
@@ -429,10 +420,7 @@ document.webkitExitFullscreen=document.exitFullscreen;
         sendDrag(cmd: "up", pe: "pointerup", me: "mouseup", point: point, in: webView)
     }
 
-
-
-    
-      static func hoverAt(point: CGPoint, in webView: WKWebView?) {
+    static func hoverAt(point: CGPoint, in webView: WKWebView?) {
         let x = Double(point.x)
         let y = Double(point.y)
         let h1 = "var el=document.elementFromPoint(\(x),\(y));var onVid=el&&el.closest('#movie_player,.html5-video-player,video,#player-control-overlay');"
@@ -445,12 +433,11 @@ document.webkitExitFullscreen=document.exitFullscreen;
         webView?.evaluateJavaScript(h1 + h2 + h3 + h3b + h3c + h4 + h5, completionHandler: nil)
     }
 
-    
     static func typeText(_ text: String, submit: Bool, into webView: WKWebView?) {
         let base64 = Data(text.utf8).base64EncodedString()
         let submitFlag = submit ? "true" : "false"
         let txtSel = "textarea,input:not([type=hidden]):not([type=file]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio])"
-        
+
         let t1 = "(function(){var bin=atob('" + base64 + "');var b=new Uint8Array(bin.length);"
         let t2 = "for(var i=0;i<bin.length;i++){b[i]=bin.charCodeAt(i);}"
         let t3 = "var val=new TextDecoder().decode(b);var inp=window.__lastFocusedInput||document.activeElement;"
@@ -464,62 +451,53 @@ document.webkitExitFullscreen=document.exitFullscreen;
         let t11 = "inp.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
         let t12 = "inp.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
         let t13 = "inp.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));"
-       let t14 = "var sb=document.querySelector('button[aria-label*=\"Search\" i],.ytSearchboxComponentSearchButton,#search-icon-legacy');if(sb){sb.click();}var f=inp.closest('form');if(f){f.submit();}"
+        let t14 = "var sb=document.querySelector('button[aria-label*=\"Search\" i],.ytSearchboxComponentSearchButton,#search-icon-legacy');if(sb){sb.click();}var f=inp.closest('form');if(f){f.submit();}"
         let t15 = "}})();"
-        
+
         webView?.evaluateJavaScript(t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t12 + t13 + t14 + t15, completionHandler: nil)
     }
-    
+
     static func hasFocusedInput(in webView: WKWebView?, completion: @escaping (Bool) -> Void) {
         let js = "Boolean(window.__lastFocusedInput)"
         webView?.evaluateJavaScript(js) { res, _ in
             completion((res as? Bool) ?? false)
         }
     }
-    
+
     static func skipVideo(seconds: Double, in webView: WKWebView?) {
         let sec = String(seconds)
         let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
-        // In skipVideo, seekVideo, and getVideoProgress:
-let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
-
-
-       let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'skip',val:" + sec + "},'*');}catch(e){}});})();"
-
-        
+        let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
+        let k3 = "if(v&&isFinite(v.duration)){v.currentTime=Math.min(Math.max(0,v.currentTime+" + sec + "),v.duration);}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'skip',val:" + sec + "},'*');}catch(e){}});})();"
         webView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
     }
-    
+
     static func seekVideo(fraction: Double, in webView: WKWebView?) {
         let frac = String(fraction)
-        let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"// In skipVideo, seekVideo, and getVideoProgress:
-let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
-
-
+        let k1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
+        let k2 = " var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
         let k3 = "if(v&&isFinite(v.duration)&&v.duration>0){v.currentTime=v.duration*" + frac + ";}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'seek',val:" + frac + "},'*');}catch(e){}});})();"
-
         webView?.evaluateJavaScript(k1 + k2 + k3, completionHandler: nil)
     }
-    
+
     static func togglePlayPause(in webView: WKWebView?) {
         let p1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
         let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids[0];"
-       let p3 = "if(v){v.paused?v.play():v.pause();}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'toggle'},'*');}catch(e){}});})();"
-
+        let p3 = "if(v){v.paused?v.play():v.pause();}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'toggle'},'*');}catch(e){}});})();"
         webView?.evaluateJavaScript(p1 + p2 + p3, completionHandler: nil)
     }
-    
+
     static func getVideoProgress(in webView: WKWebView?, completion: @escaping (Double, Double) -> Void) {
         let t1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
         let t2 = "var v=vids.find(function(x){return !x.paused&&x.duration>0;})||document.querySelector('#movie_player video')||vids[0];"
         let t3 = "if(!v||!isFinite(v.duration)||v.duration<=0)return null;return [v.currentTime,v.duration];})();"
+        webView?.evaluateJavaScript(t1 + t2 + t3) { result, _ in
+            guard let arr = result as? [Double], let cur = arr.first, let dur = arr.last, dur > 0 else { return }
+            completion(cur, dur)
+        }
+    }
 
-webView?.evaluateJavaScript(t1 + t2 + t3) { result, _ in
-guard let arr = result as? [Double], let cur = arr.first, let dur = arr.last, dur > 0 else { return }
-completion(cur, dur)
-}
-}
-      static func toggleWebFullscreen(isFull: Bool, in webView: WKWebView?) {
+    static func toggleWebFullscreen(isFull: Bool, in webView: WKWebView?) {
         let fullFlag = isFull ? "true" : "false"
         let f1 = "(function(){document.querySelectorAll('video').forEach(function(v){if(v.webkitExitFullscreen){try{v.webkitExitFullscreen();}catch(e){}}});"
         let f2 = "var style=document.getElementById('custom-fs-style');"
@@ -530,38 +508,39 @@ completion(cur, dur)
         let f7 = "}else{if(style){style.remove();}var pst=document.getElementById('if-parent-fs');if(pst){pst.remove();}document.querySelectorAll('iframe[data-if-fs]').forEach(function(f){f.removeAttribute('data-if-fs');});}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:" + fullFlag + "},'*');}catch(e){}});window.dispatchEvent(new Event('resize'));})();"
         webView?.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6 + f7, completionHandler: nil)
     }
-   static func toggleSiteFullscreen(in webView: WKWebView?) {
-    guard let webView else { return }
-    let js = """
-    (function(){
-      var el = window.__fsEl;
-      if (el) {
-        if (el.tagName === 'IFRAME') {
-            try { el.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:false},'*'); } catch(e){}
-            el.removeAttribute('data-if-fs');
-            var pst = document.getElementById('if-parent-fs'); if (pst) pst.remove();
-            var st = document.getElementById('if-fs'); if (st) st.remove();
-            window.__fsEl = null;
-            document.dispatchEvent(new Event('fullscreenchange'));
-            window.__notifyFs(false);
-            return 'exit-iframe';
-        }
-        document.exitFullscreen();
-        return 'exit';
-      }
-      var btn = document.querySelector('.ytp-fullscreen-button,[aria-label*=\\"full screen\\" i],[aria-label*=\\"fullscreen\\" i],[title*=\\"full screen\\" i],[title*=\\"fullscreen\\" i],[data-uia=\\"player-fullscreen-button\\"]');
-      if (btn) { btn.click(); if (window.__fsEl) return 'site-button'; }
-      var iframes = Array.prototype.slice.call(document.querySelectorAll('iframe'));
-      if (iframes.length) {
-        var best = null, area = 0;
-        iframes.forEach(function(f){ try { var r = f.getBoundingClientRect(); var a = r.width * r.height; if (a > area) { area = a; best = f; } } catch(e){} });
-        if (best) { try { best.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:true},'*'); } catch(e){} return 'iframe'; }
-      }
-      var tgt = document.querySelector('#movie_player,.html5-video-player,netflix-player,.player-player-container,video') || document.documentElement;
-      tgt.requestFullscreen();
-      return 'direct';
-    })()
-    """
-    webView.evaluateJavaScript(js, completionHandler: nil)
-}
+
+    static func toggleSiteFullscreen(in webView: WKWebView?) {
+        guard let webView else { return }
+        let js = """
+        (function(){
+          var el = window.__fsEl;
+          if (el) {
+            if (el.tagName === 'IFRAME') {
+                try { el.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:false},'*'); } catch(e){}
+                el.removeAttribute('data-if-fs');
+                var pst = document.getElementById('if-parent-fs'); if (pst) pst.remove();
+                var st = document.getElementById('if-fs'); if (st) st.remove();
+                window.__fsEl = null;
+                document.dispatchEvent(new Event('fullscreenchange'));
+                window.__notifyFs(false);
+                return 'exit-iframe';
+            }
+            document.exitFullscreen();
+            return 'exit';
+          }
+          var btn = document.querySelector('.ytp-fullscreen-button,[aria-label*=\\"full screen\\" i],[aria-label*=\\"fullscreen\\" i],[title*=\\"full screen\\" i],[title*=\\"fullscreen\\" i],[data-uia=\\"player-fullscreen-button\\"]');
+          if (btn) { btn.click(); if (window.__fsEl) return 'site-button'; }
+          var iframes = Array.prototype.slice.call(document.querySelectorAll('iframe'));
+          if (iframes.length) {
+            var best = null, area = 0;
+            iframes.forEach(function(f){ try { var r = f.getBoundingClientRect(); var a = r.width * r.height; if (a > area) { area = a; best = f; } } catch(e){} });
+            if (best) { try { best.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:true},'*'); } catch(e){} return 'iframe'; }
+          }
+          var tgt = document.querySelector('#movie_player,.html5-video-player,netflix-player,.player-player-container,video') || document.documentElement;
+          tgt.requestFullscreen();
+          return 'direct';
+        })()
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
 }
