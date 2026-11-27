@@ -56,16 +56,62 @@ final class WebEngine {
     }
 
     // 3. SAFETY OVERRIDES, FALLBACK SKIPPER, UNMUTER & IFRAME CONTROLS (.atDocumentEnd)
-    let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){};"
-    let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){};"
-    let s3 = "window.__fsEl=null;try{Object.defineProperty(document,'fullscreenElement',{get:function(){return window.__fsEl;}});Object.defineProperty(document,'webkitFullscreenElement',{get:function(){return window.__fsEl;}});}catch(e){}Element.prototype.requestFullscreen=function(){if(window.top!==window){window.__fsEl=this;window.__isIfFs=true;document.dispatchEvent(new Event('fullscreenchange'));window.postMessage({tok:'\(msgToken)',cmd:'fs',val:true},'*');window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:true},'*');}return Promise.resolve();};"
-    let s4 = "Element.prototype.webkitRequestFullscreen=Element.prototype.requestFullscreen;document.exitFullscreen=function(){if(window.top!==window){window.__fsEl=null;window.__isIfFs=false;document.dispatchEvent(new Event('fullscreenchange'));window.postMessage({tok:'\(msgToken)',cmd:'fs',val:false},'*');window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:false},'*');}return Promise.resolve();};document.webkitExitFullscreen=document.exitFullscreen;"
-    let s4b = "window.open=function(){return null;};"
+    let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){try{this.requestFullscreen();}catch(e){}};"
+let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){try{this.requestFullscreen();}catch(e){}};"
+let s3 = """
+window.__fsEl=null;
+try{Object.defineProperty(document,'fullscreenElement',{get:function(){return window.__fsEl;},configurable:true});
+Object.defineProperty(document,'webkitFullscreenElement',{get:function(){return window.__fsEl;},configurable:true});}catch(e){}
+window.__applyFsCss=function(el){
+  var st=document.getElementById('fake-fs');
+  if(!st){st=document.createElement('style');st.id='fake-fs';(document.head||document.documentElement).appendChild(st);
+  st.textContent='[data-pkb-fs=\\"1\\"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:#000!important;object-fit:contain!important;transform:none!important;}';}
+  el.setAttribute('data-pkb-fs','1');
+};
+window.__clearFsCss=function(){var el=document.querySelector('[data-pkb-fs=\\"1\\"]');if(el)el.removeAttribute('data-pkb-fs');};
+window.__notifyFs=function(val){
+  if(window.top!==window){window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:val},'*');}
+  else if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.fullscreenToggle){window.webkit.messageHandlers.fullscreenToggle.postMessage(val);}
+};
+Element.prototype.requestFullscreen=function(){
+  window.__clearFsCss();
+  window.__fsEl=this;
+  window.__applyFsCss(this);
+  document.dispatchEvent(new Event('fullscreenchange'));
+  document.dispatchEvent(new Event('webkitfullscreenchange'));
+  window.__notifyFs(true);
+  return Promise.resolve();
+};
+Element.prototype.webkitRequestFullscreen=Element.prototype.requestFullscreen;
+document.exitFullscreen=function(){
+  window.__fsEl=null;
+  window.__clearFsCss();
+  document.dispatchEvent(new Event('fullscreenchange'));
+  document.dispatchEvent(new Event('webkitfullscreenchange'));
+  window.__notifyFs(false);
+  return Promise.resolve();
+};
+document.webkitExitFullscreen=document.exitFullscreen;
+"""
+let s4b = "window.open=function(){return null;};"
     let s5a = "var st=document.createElement('style');"
-    let s5b = "st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container,.art-progress-tip,.jw-preview,.plyr__preview-thumb,.vds-thumbnail,[data-part*=\"thumbnail\" i],[class*=\"preview\" i]:not([class*=\"yt\" i]){display:none!important;visibility:hidden!important;opacity:0!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
+    let s5b = "st.textContent='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,.ytp-ad-overlay-container,.art-progress-tip,.jw-preview,.jw-tooltip-time,.plyr__preview-thumb,.vds-thumbnail,[data-part*=\"thumbnail\" i],[class*=\"preview\" i]:not([class*=\"yt\" i]){display:none!important;visibility:hidden!important;opacity:0!important;}';if(document.head||document.documentElement){(document.head||document.documentElement).appendChild(st);}"
     let s6 = "window.__userMuted=false;document.addEventListener('click',function(e){if(e.target&&e.target.closest('.ytp-mute-button')){var v=document.querySelector('video');if(v)window.__userMuted=!v.muted;}},true);setInterval(function(){"
     let s7a = "document.querySelectorAll('video').forEach(function(v){v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');});"
-    let s7b = "if(window.top!==window&&document.querySelector('video')){document.querySelectorAll('*').forEach(function(el){if(el.shadowRoot&&!el.shadowRoot.getElementById('no-thumb')){var ss=document.createElement('style');ss.id='no-thumb';ss.textContent='media-slider-thumbnail,media-slider-preview,[part*=\"thumbnail\"],[part*=\"preview\"],[class*=\"thumbnail\"],[class*=\"preview\"]{display:none!important;opacity:0!important;}';el.shadowRoot.appendChild(ss);}});}"
+    let s7b = window.__killThumbs = function (root) {
+    try {
+        root.querySelectorAll('*').forEach(function (el) {
+            if (el.shadowRoot) {
+                if (!el.shadowRoot.getElementById('no-thumb')) {
+                    var ss = document.createElement('style'); ss.id = 'no-thumb';
+                    ss.textContent = 'media-slider-thumbnail,media-slider-preview,[part*="thumbnail"],[part*="preview"],[class*="thumbnail"],[class*="preview"],[class*="hover-preview" i],[class*="scrubber-preview" i],[class*="preview-thumb" i]{display:none!important;opacity:0!important;pointer-events:none!important;}';
+                    el.shadowRoot.appendChild(ss);
+                }
+                window.__killThumbs(el.shadowRoot);
+            }
+        });
+    } catch (e) {}
+};
     let s8 = "var skipBtns=document.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,.ytp-skip-ad-button__text,.ytp-ad-overlay-close-button');"
     let s9 = "skipBtns.forEach(function(s){if(window.PointerEvent){s.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));s.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));}s.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));s.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));s.click();});"
     let s10 = "var ad=document.querySelector('.ad-showing,.ad-interrupting');"
@@ -138,20 +184,18 @@ final class WebEngine {
                             });
                             return;
                             }
-                                                      if (d.cmd === 'fs') {
-            window.__isIfFs = Boolean(d.val);
-            if (!d.val && window.__fsEl) {
-                window.__fsEl = null;
-                document.dispatchEvent(new Event('fullscreenchange'));
-            }
-            var st = document.getElementById('if-fs');
-
-
+             if (d.cmd === 'fs') {
+                window.__isIfFs = Boolean(d.val);
+                if (!d.val && window.__fsEl) {
+                    window.__fsEl = null;
+                    document.dispatchEvent(new Event('fullscreenchange'));
+                }
+                var st = document.getElementById('if-fs');
                 if (d.val) {
                     if (!st) {
                         st = document.createElement('style');
                         st.id = 'if-fs';
-                         st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;background:#000!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;min-width:100vw!important;min-height:100vh!important;transform:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
+                        st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;background:#000!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;min-width:100vw!important;min-height:100vh!important;transform:none!important;object-fit:contain!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
                         document.head.appendChild(st);
                     }
                 } else {
@@ -160,6 +204,28 @@ final class WebEngine {
                     if (pst) pst.remove();
                     document.querySelectorAll('iframe[data-if-fs]').forEach(function(f) { f.removeAttribute('data-if-fs'); });
                 }
+
+                // Sync web player's own fullscreen button icon/state
+                var pl = document.querySelector('.jwplayer,.plyr,.video-js,.art-video-player,media-player,#movie_player');
+                var alreadyFs = Boolean(window.__fsEl) || (pl && (
+                    pl.classList.contains('jw-flag-fullscreen') ||
+                    pl.classList.contains('plyr--fullscreen-active') ||
+                    pl.classList.contains('vjs-fullscreen') ||
+                    pl.classList.contains('art-fullscreen') ||
+                    pl.hasAttribute('data-fullscreen')
+                ));
+                if (Boolean(d.val) !== alreadyFs) {
+                    var fsBtn = document.querySelector('.ytp-fullscreen-button,.jw-icon-fullscreen,.plyr__control[data-plyr="fullscreen"],.vjs-fullscreen-control,.art-icon-fullscreen,media-fullscreen-button,[aria-label*="full screen" i],[aria-label*="fullscreen" i],[title*="full screen" i],[title*="fullscreen" i]');
+                    if (!fsBtn) {
+                        document.querySelectorAll('*').forEach(function(el) {
+                            if (!fsBtn && el.shadowRoot) {
+                                fsBtn = el.shadowRoot.querySelector('media-fullscreen-button,[part*="fullscreen"],[aria-label*="fullscreen" i],[aria-label*="full screen" i]');
+                            }
+                        });
+                    }
+                    if (fsBtn) { fsBtn.click(); }
+                }
+
                 document.querySelectorAll('iframe').forEach(function(f) {
                     try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
                 });
@@ -186,41 +252,78 @@ final class WebEngine {
                             window.__dragEl = null;
                             return;
                             }
-                            if (d.cmd === 'hover') {
-                            var hx = d.x || 100, hy = d.y || 100;
-                            var he = document.elementFromPoint(hx, hy);
-                            if (window.__lastHoverEl && window.__lastHoverEl !== he) {
-                            window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he }));
-                            window.__lastHoverEl.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he }));
-                            }
-                            window.__lastHoverEl = he;
-                            var onProg = he && he.closest('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]');
-                            if (!onProg) {
-                            document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control').forEach(function(p) {
-                            p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy }));
-                            p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy }));
-                            });
-                            }
-                            if (he && he.tagName === 'IFRAME') {
-                            var hr = he.getBoundingClientRect();
-                           try { he.contentWindow.postMessage({ tok: '\(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
-                            return;
-                            }
-                            var t = he || v || document.body;
-                            t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: hx, clientY: hy }));
-                            if (window.PointerEvent) t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hx, clientY: hy }));
-                            var pl = document.querySelector('.jwplayer,.plyr,.video-js,.art-video-player');
-                            if (pl) {
-                            pl.classList.remove('jw-flag-user-inactive', 'plyr--hide-controls', 'vjs-user-inactive', 'art-control-hide');
-                            pl.classList.add('jw-flag-user-active', 'vjs-user-active', 'art-hover');
-                            clearTimeout(window.__ifHide);
-                            window.__ifHide = setTimeout(function() {
-                            pl.classList.add('jw-flag-user-inactive', 'plyr--hide-controls', 'vjs-user-inactive');
-                            pl.classList.remove('jw-flag-user-active', 'vjs-user-active', 'art-hover');
-                            }, 2500);
-                            }
-                            return;
-                            }
+                           if (d.cmd === 'hover') {
+    var hx = d.x || 100, hy = d.y || 100;
+    var he = document.elementFromPoint(hx, hy);
+    var prev = window.__lastHoverEl;
+    if (prev && prev !== he) {
+        // build ancestor chains
+        var oldPath = [], n = prev; while (n) { oldPath.push(n); n = n.parentElement; }
+        var newPath = [], m = he;   while (m) { newPath.push(m); m = m.parentElement; }
+        var newSet = new Set(newPath), common = null;
+        for (var i = 0; i < oldPath.length; i++) { if (newSet.has(oldPath[i])) { common = oldPath[i]; break; } }
+        // fire out/leave UP the old chain until the common ancestor
+        for (var i = 0; i < oldPath.length; i++) { var el = oldPath[i]; if (el === common) break;
+            el.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he }));
+            el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he }));
+            if (window.PointerEvent) {
+                el.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: he, pointerId: 1 }));
+                el.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: he, pointerId: 1 }));
+            }
+        }
+        // fire over/enter DOWN the new chain
+        for (var i = newPath.length - 1; i >= 0; i--) { var el = newPath[i]; if (el === common) break;
+            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: prev }));
+            el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: prev }));
+            if (window.PointerEvent) {
+                el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, clientX: hx, clientY: hy, relatedTarget: prev, pointerId: 1 }));
+                el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false, clientX: hx, clientY: hy, relatedTarget: prev, pointerId: 1 }));
+            }
+        }
+    }
+    window.__lastHoverEl = he;
+
+    // scrubber-specific leave when the cursor is not over a progress bar
+    var onProg = he && he.closest('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]');
+    if (!onProg) {
+        document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]').forEach(function (p) {
+            p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: hx, clientY: hy }));
+            p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: hx, clientY: hy }));
+            if (window.PointerEvent) { p.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerId: 1 })); }
+        });
+    }
+
+    if (he && he.tagName === 'IFRAME') {
+        var hr = he.getBoundingClientRect();
+        try { he.contentWindow.postMessage({ tok: '\(msgToken)', cmd: 'hover', x: hx - hr.left, y: hy - hr.top }, '*'); } catch (err) {}
+        return;
+    }
+
+    var t = he || v || document.body;
+    t.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: hx, clientY: hy }));
+    if (window.PointerEvent) t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: hx, clientY: hy }));
+
+    // IDLE WATCHDOG: if no hover event for 2s (finger lifted / stopped),
+    // tell the page the mouse actually left — this kills stuck previews & lets controls auto-hide
+    clearTimeout(window.__hoverIdle);
+    window.__hoverIdle = setTimeout(function () {
+        var el = window.__lastHoverEl;
+        while (el) {
+            el.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+            el.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, relatedTarget: document.body }));
+            if (window.PointerEvent) {
+                el.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerId: 1 }));
+                el.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerId: 1 }));
+            }
+            el = el.parentElement;
+        }
+        document.querySelectorAll('.art-control-progress,.plyr__progress,.jw-slider-time,.vjs-progress-control,[class*="progress" i],[class*="timeline" i]').forEach(function (p) {
+            p.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false }));
+            p.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+        });
+        window.__lastHoverEl = null;
+    }, 2000);
+}
                             document.querySelectorAll('iframe').forEach(function(f) {
                             try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
                             });
@@ -432,5 +535,20 @@ completion(cur, dur)
         let f7 = "}else{if(style){style.remove();}var pst=document.getElementById('if-parent-fs');if(pst){pst.remove();}document.querySelectorAll('iframe[data-if-fs]').forEach(function(f){f.removeAttribute('data-if-fs');});}document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:" + fullFlag + "},'*');}catch(e){}});window.dispatchEvent(new Event('resize'));})();"
         webView?.evaluateJavaScript(f1 + f2 + f3 + f4 + f5 + f6 + f7, completionHandler: nil)
     }
+    static func toggleSiteFullscreen(in webView: WKWebView?) {
+    guard let webView else { return }
+    let js = """
+    (function(){
+      var fs = window.__fsEl || document.fullscreenElement;
+      if (fs) { document.exitFullscreen(); return 'exit'; }
+      var btn = document.querySelector('.ytp-fullscreen-button,[aria-label*="full screen" i],[aria-label*="fullscreen" i],[title*="full screen" i],[data-uia="player-fullscreen-button"]');
+      if (btn) { btn.click(); return 'site-button'; }
+      var el = document.querySelector('#movie_player,.html5-video-player,netflix-player,.player-player-container,video') || document.documentElement;
+      el.requestFullscreen();
+      return 'direct';
+    })()
+    """
+    webView.evaluateJavaScript(js, completionHandler: nil)
+}
 
 }
