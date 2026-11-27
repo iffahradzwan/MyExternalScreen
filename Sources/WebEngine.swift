@@ -13,8 +13,8 @@ final class WebEngine {
         config.allowsPictureInPictureMediaPlayback = false
         config.mediaTypesRequiringUserActionForPlayback = []
 
-        // 1. EARLY INJECTIONS (.atDocumentStart) - MUST run before site code
-        let e1 = "(function(){try{Object.defineProperty(document,'hidden',{get:function(){return false;}});Object.defineProperty(document,'webkitHidden',{get:function(){return false;}});Object.defineProperty(document,'visibilityState',{get:function(){return 'visible';}});Object.defineProperty(document,'webkitVisibilityState',{get:function(){return 'visible';}});Object.defineProperty(document,'fullscreenEnabled',{get:function(){return true;},configurable:true});Object.defineProperty(document,'webkitFullscreenEnabled',{get:function(){return true;},configurable:true});document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation();},true);document.addEventListener('webkitvisibilitychange',function(e){e.stopImmediatePropagation();},true);}catch(e){}"
+        // 1. EARLY AD-STRIPPING, VISIBILITY & PLAYSINLINE (.atDocumentStart)
+        let e1 = "(function(){try{Object.defineProperty(document,'hidden',{get:function(){return false;}});Object.defineProperty(document,'webkitHidden',{get:function(){return false;}});Object.defineProperty(document,'visibilityState',{get:function(){return 'visible';}});Object.defineProperty(document,'webkitVisibilityState',{get:function(){return 'visible';}});document.addEventListener('visibilitychange',function(e){e.stopImmediatePropagation();},true);document.addEventListener('webkitvisibilitychange',function(e){e.stopImmediatePropagation();},true);}catch(e){}"
         let e2 = "var origCreate=document.createElement;document.createElement=function(tag,opt){var el=origCreate.call(this,tag,opt);if(typeof tag==='string'&&tag.toLowerCase()==='video'){el.setAttribute('playsinline','');el.setAttribute('webkit-playsinline','');el.playsInline=true;}return el;};var origShadow=Element.prototype.attachShadow;Element.prototype.attachShadow=function(init){var sr=origShadow.call(this,{mode:'open'});var st=document.createElement('style');st.textContent='media-slider-thumbnail,media-slider-preview,[part*=\"thumbnail\"],[part*=\"preview\"],[class*=\"thumbnail\"],[class*=\"preview\"]{display:none!important;opacity:0!important;}';sr.appendChild(st);return sr;};"
         let e3 = "function cleanAdData(o){if(!o||typeof o!=='object')return o;delete o.adPlacements;delete o.playerAds;delete o.adSlots;delete o.adBreakHeartbeatParams;return o;}"
         let e4 = "var _ytInit=undefined;try{Object.defineProperty(window,'ytInitialPlayerResponse',{configurable:true,get:function(){return _ytInit;},set:function(v){_ytInit=cleanAdData(v);}});}catch(e){}"
@@ -55,22 +55,26 @@ final class WebEngine {
             }
         }
 
-        // 3. LATE INJECTIONS (.atDocumentEnd)
+        // 3. SAFETY OVERRIDES, FALLBACK SKIPPER, UNMUTER & IFRAME CONTROLS (.atDocumentEnd)
         let s1 = "HTMLVideoElement.prototype.webkitEnterFullscreen=function(){try{this.requestFullscreen();}catch(e){}};"
         let s2 = "HTMLVideoElement.prototype.webkitEnterFullScreen=function(){try{this.requestFullscreen();}catch(e){}};"
+        // NOTE: each defineProperty in its OWN try/catch so one failure can't kill the fake.
         let s3 = """
 window.__fsEl=null;
-try{Object.defineProperty(document,'fullscreenElement',{get:function(){return window.__fsEl;},configurable:true});
-Object.defineProperty(document,'webkitFullscreenElement',{get:function(){return window.__fsEl;},configurable:true});
-}catch(e){}
+try{Object.defineProperty(document,'fullscreenElement',{get:function(){return window.__fsEl;},configurable:true});}catch(e){}
+try{Object.defineProperty(document,'webkitFullscreenElement',{get:function(){return window.__fsEl;},configurable:true});}catch(e){}
+try{Object.defineProperty(document,'fullscreenEnabled',{get:function(){return true;},configurable:true});}catch(e){}
+try{Object.defineProperty(document,'webkitFullscreenEnabled',{get:function(){return true;},configurable:true});}catch(e){}
+try{Object.defineProperty(Document.prototype,'fullscreenEnabled',{get:function(){return true;},configurable:true});}catch(e){}
+try{Object.defineProperty(Document.prototype,'webkitFullscreenEnabled',{get:function(){return true;},configurable:true});}catch(e){}
 window.__applyFsCss=function(el){
   var st=document.getElementById('fake-fs');
   if(!st){st=document.createElement('style');st.id='fake-fs';(document.head||document.documentElement).appendChild(st);
-  st.textContent='[data-pkb-fs="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:#000!important;transform:none!important;} [data-pkb-fs="1"] video,[data-pkb-fs="1"] .html5-video-container{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;} [data-pkb-fs="1"] video{object-fit:contain!important;} .ytp-chrome-bottom,.ytp-chrome-top,.ytp-gradient-bottom,.ytp-gradient-top{z-index:2147483647!important;} .pkb-fs ytd-masthead,.pkb-fs #secondary,.pkb-fs #below,.pkb-fs #guide{display:none!important;}';}
+  st.textContent='[data-pkb-fs=\\"1\\"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;z-index:2147483647!important;background:#000!important;transform:none!important;} [data-pkb-fs=\\"1\\"] video,[data-pkb-fs=\\"1\\"] .html5-video-container{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;} [data-pkb-fs=\\"1\\"] video{object-fit:contain!important;} .ytp-chrome-bottom,.ytp-chrome-top,.ytp-gradient-bottom,.ytp-gradient-top{z-index:2147483647!important;} .pkb-fs ytd-masthead,.pkb-fs #secondary,.pkb-fs #below,.pkb-fs #guide{display:none!important;}';}
   el.setAttribute('data-pkb-fs','1');
   document.body.classList.add('pkb-fs');
 };
-window.__clearFsCss=function(){var el=document.querySelector('[data-pkb-fs="1"]');if(el)el.removeAttribute('data-pkb-fs');document.body.classList.remove('pkb-fs');};
+window.__clearFsCss=function(){var el=document.querySelector('[data-pkb-fs=\\"1\\"]');if(el)el.removeAttribute('data-pkb-fs');document.body.classList.remove('pkb-fs');};
 window.__notifyFs=function(val){
   if(window.top!==window){window.parent.postMessage({tok:'\(msgToken)',cmd:'iframe-fs',val:val},'*');}
   else if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.fullscreenToggle){window.webkit.messageHandlers.fullscreenToggle.postMessage(val);}
@@ -176,18 +180,52 @@ document.webkitExitFullscreen=document.exitFullscreen;
         }
 
         if (d.cmd === 'fs') {
+            window.__isIfFs = Boolean(d.val);
+            if (!d.val && window.__fsEl) {
+                window.__fsEl = null;
+                document.dispatchEvent(new Event('fullscreenchange'));
+            }
+            var st = document.getElementById('if-fs');
             if (d.val) {
-                var tgt = document.querySelector('video,media-player,.player-player-container,.jwplayer,.plyr,.video-js,.art-video-player,#movie_player') || document.documentElement;
-                tgt.requestFullscreen();
+                if (!st) {
+                    st = document.createElement('style');
+                    st.id = 'if-fs';
+                    st.textContent = 'html,body{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important;background:#000!important;}video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;min-width:100vw!important;min-height:100vh!important;transform:none!important;object-fit:cover!important;z-index:1!important;}button,[role=button],.jw-controls,.jw-display,.plyr__controls,.vjs-control-bar,.art-bottom,[class*="control" i]{z-index:999999!important;}';
+                    document.head.appendChild(st);
+                }
             } else {
-                if (window.__fsEl && window.__fsEl.tagName !== 'IFRAME') {
-                    document.exitFullscreen();
-                } else {
-                    window.__fsEl = null;
-                    var st = document.getElementById('if-fs'); if (st) st.remove();
-                    document.dispatchEvent(new Event('fullscreenchange'));
+                if (st) st.remove();
+                var pst = document.getElementById('if-parent-fs');
+                if (pst) pst.remove();
+                document.querySelectorAll('iframe[data-if-fs]').forEach(function(f) { f.removeAttribute('data-if-fs'); });
+            }
+
+            var pl = document.querySelector('.jwplayer,.plyr,.video-js,.art-video-player,media-player,#movie_player');
+            var alreadyFs = Boolean(window.__fsEl) || (pl && (
+                pl.classList.contains('jw-flag-fullscreen') ||
+                pl.classList.contains('plyr--fullscreen-active') ||
+                pl.classList.contains('vjs-fullscreen') ||
+                pl.classList.contains('art-fullscreen') ||
+                pl.hasAttribute('data-fullscreen')
+            ));
+            if (Boolean(d.val) !== alreadyFs) {
+                var fsBtn = document.querySelector('.ytp-fullscreen-button,.jw-icon-fullscreen,.plyr__control[data-plyr="fullscreen"],.vjs-fullscreen-control,.art-icon-fullscreen,media-fullscreen-button,[aria-label*="full screen" i],[aria-label*="fullscreen" i],[title*="full screen" i],[title*="fullscreen" i]');
+                if (!fsBtn) {
+                    document.querySelectorAll('*').forEach(function(el) {
+                        if (!fsBtn && el.shadowRoot) {
+                            fsBtn = el.shadowRoot.querySelector('media-fullscreen-button,[part*="fullscreen"],[aria-label*="fullscreen" i],[aria-label*="full screen" i]');
+                        }
+                    });
+                }
+                if (fsBtn) { fsBtn.click(); } else {
+                    var tgt = document.querySelector('video,media-player,.player-player-container,.jwplayer,.plyr,.video-js,.art-video-player,#movie_player');
+                    if (tgt) tgt.requestFullscreen();
                 }
             }
+
+            document.querySelectorAll('iframe').forEach(function(f) {
+                try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+            });
             return;
         }
 
@@ -283,14 +321,14 @@ document.webkitExitFullscreen=document.exitFullscreen;
         if (!v) return;
 
         if (d.cmd === 'toggle') {
-            var sel = '.vds-play-button,.art-control-playAndPause,.jw-icon-playback,.plyr__control[data-plyr="play"],.vjs-play-control,.ytp-play-button,[aria-label*="play" i],[aria-label*="pause" i],[title*="play" i],[title*="pause" i]';
+            v.paused ? v.play() : v.pause();
+            var sel = '.vds-play-button,.art-control-playAndPause,.jw-icon-playback,.plyr__control[data-plyr="play"],.vjs-play-control,.ytp-play-button';
             var pb = document.querySelector(sel);
             if (!pb) {
                 document.querySelectorAll('*').forEach(function(el) {
-                    if (!pb && el.shadowRoot) pb = el.shadowRoot.querySelector(sel);
+                    if (!pb && el.shadowRoot) { pb = el.shadowRoot.querySelector(sel); }
                 });
             }
-            if (pb) { pb.click(); } else { v.paused ? v.play() : v.pause(); }
         } else if (d.cmd === 'skip' && isFinite(v.duration)) {
             v.currentTime = Math.min(Math.max(0, v.currentTime + d.val), v.duration);
         } else if (d.cmd === 'seek' && isFinite(v.duration)) {
@@ -329,26 +367,31 @@ document.webkitExitFullscreen=document.exitFullscreen;
 
         let c1 = "(function(){var doc=document;var x=" + px + ";var y=" + py + ";"
         let c2 = "var el=doc.elementFromPoint(x,y);"
-        let c3 = "while(el&&el.tagName==='IFRAME'){var r=el.getBoundingClientRect();x-=r.left;y-=r.top;try{doc=el.contentDocument;if(!doc)throw 1;el=doc.elementFromPoint(x,y);}catch(e){try{el.contentWindow.postMessage({tok:'\(msgToken)',cmd:'click',x:x,y:y},'*');}catch(e2){}return {isInput:false};}}"
+        let c3 = "while(el&&el.tagName==='IFRAME'){var r=el.getBoundingClientRect();x-=r.left;y-=r.top;try{doc=el.contentDocument;if(!doc)throw 1;el=doc.elementFromPoint(x,y);}catch(e){try{el.contentWindow.postMessage({tok:'\(msgToken)',cmd:'click',x:x,y:y},'*');}catch(e2){}return {isInput:false,hitFullscreen:false};}}"
         let c4 = "if(!el)return null;"
         let c5 = "var inp=el.matches('" + txtSel + "')?el:el.closest('" + txtSel + "');"
         let c6 = "if(!inp&&!el.closest('button,[role=button],a,[role=option],li')){var box=el.closest('[role=search],[role=combobox],.RNNXgb,.ytSearchboxComponentInputBox');if(box){inp=box.querySelector('" + txtSel + "');}}"
         let c7 = "if(inp){window.__lastFocusedInput=inp;inp.focus();return {isInput:true,val:(inp.value||'')};}"
         let c8 = "window.__lastFocusedInput=null;"
-        let c9 = "var t=el.closest('a,button,[role=button],[role=option],[role=tab],[role=link],[role=menuitem],[role=menuitemradio],[role=menuitemcheckbox],.ytp-menuitem,li,select,label,yt-formatted-string,ytd-thumbnail')||el;"
-        let c10 = "if(t.focus){t.focus();}"
-        let c11 = "var po={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:1,pointerType:'mouse',isPrimary:true,button:0,buttons:1};"
-        let c12 = "var mo={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y,button:0,buttons:1};"
-        let c13 = "if(window.PointerEvent){t.dispatchEvent(new PointerEvent('pointerdown',po));}"
-        let c14 = "t.dispatchEvent(new MouseEvent('mousedown',mo));"
-        let c15 = "if(window.PointerEvent){t.dispatchEvent(new PointerEvent('pointerup',po));}"
-        let c16 = "t.dispatchEvent(new MouseEvent('mouseup',mo));"
-        let c17 = "t.dispatchEvent(new MouseEvent('click',mo));"
-        let c18 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0&&t.target!=='_blank'){window.location.href=t.href;}"
-        let c19 = "return {isInput:false};})();"
+        let c9 = "var isFsBtn=Boolean(el.closest('.ytp-fullscreen-button,.fullscreen-icon,.jw-icon-fullscreen,.plyr__control[data-plyr=\\\"fullscreen\\\"],.vjs-fullscreen-control,.art-icon-fullscreen,[aria-label*=\\\"full screen\\\" i],[aria-label*=\\\"fullscreen\\\" i],[title*=\\\"fullscreen\\\" i],[title*=\\\"full screen\\\" i]'));"
+        let c10 = "var t=el.closest('a,button,[role=button],[role=option],[role=tab],[role=link],[role=menuitem],[role=menuitemradio],[role=menuitemcheckbox],.ytp-menuitem,li,select,label,yt-formatted-string,ytd-thumbnail')||el;"
+        let c11 = "if(t.focus){t.focus();}"
+        let c12 = "var po={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:1,pointerType:'mouse',isPrimary:true,button:0,buttons:1};"
+        let c13 = "var mo={view:window,bubbles:true,cancelable:true,clientX:x,clientY:y,button:0,buttons:1};"
+        let c14 = "if(window.PointerEvent){t.dispatchEvent(new PointerEvent('pointerdown',po));}"
+        let c15 = "t.dispatchEvent(new MouseEvent('mousedown',mo));"
+        let c16 = "if(window.PointerEvent){t.dispatchEvent(new PointerEvent('pointerup',po));}"
+        let c17 = "t.dispatchEvent(new MouseEvent('mouseup',mo));"
+        let c18 = "t.dispatchEvent(new MouseEvent('click',mo));"
+        let c19 = "if(t.tagName==='A'&&t.href&&t.href.indexOf('javascript:')!==0&&t.target!=='_blank'){window.location.href=t.href;}"
+        let c20 = "return {isInput:false,hitFullscreen:(isFsBtn&&!window.__fsEl)};})();"
 
-        webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19) { res, _ in
+        webView.evaluateJavaScript(c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20) { res, _ in
             guard let dict = res as? [String: Any] else { return }
+            if let hitFS = dict["hitFullscreen"] as? Bool, hitFS {
+                onFullscreen()
+                return
+            }
             if let isInput = dict["isInput"] as? Bool, isInput {
                 onInput((dict["val"] as? String) ?? "")
             }
@@ -440,10 +483,12 @@ document.webkitExitFullscreen=document.exitFullscreen;
     }
 
     static func togglePlayPause(in webView: WKWebView?) {
-        let p1 = "(function(){var sel='.vds-play-button,.art-control-playAndPause,.jw-icon-playback,.plyr__control[data-plyr=\\\"play\\\"],.vjs-play-control,.ytp-play-button,[aria-label*=\\\"play\\\" i],[aria-label*=\\\"pause\\\" i],[title*=\\\"play\\\" i],[title*=\\\"pause\\\" i]';"
-        let p2 = "var pb=document.querySelector(sel);if(!pb){document.querySelectorAll('*').forEach(function(el){if(!pb&&el.shadowRoot)pb=el.shadowRoot.querySelector(sel);});}"
-        let p3 = "var vids=Array.from(document.querySelectorAll('video'));var v=vids.find(function(x){return x.duration>0;})||vids[0];"
-        let p4 = "if(pb){pb.click();}else if(v){v.paused?v.play():v.pause();}"
+        // Raw <video> FIRST (reliable everywhere), then drive the player button if present,
+        // then propagate into every iframe (handles cross-origin embeds like vidsrc).
+        let p1 = "(function(){var vids=Array.from(document.querySelectorAll('video'));"
+        let p2 = "var v=vids.find(function(x){return x.duration>0;})||vids[0];"
+        let p3 = "if(v){v.paused?v.play():v.pause();}"
+        let p4 = "var sel='.vds-play-button,.art-control-playAndPause,.jw-icon-playback,.plyr__control[data-plyr=\\\"play\\\"],.vjs-play-control,.ytp-play-button';var pb=document.querySelector(sel);if(!pb){document.querySelectorAll('*').forEach(function(el){if(!pb&&el.shadowRoot)pb=el.shadowRoot.querySelector(sel);});}if(pb&&!v){pb.click();}"
         let p5 = "document.querySelectorAll('iframe').forEach(function(f){try{f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'toggle'},'*');}catch(e){}});})();"
         webView?.evaluateJavaScript(p1 + p2 + p3 + p4 + p5, completionHandler: nil)
     }
@@ -472,6 +517,8 @@ document.webkitExitFullscreen=document.exitFullscreen;
 
     static func toggleSiteFullscreen(in webView: WKWebView?) {
         guard let webView else { return }
+        // Order: exit if already FS -> click top-frame player button -> drive iframes (no black bg)
+        //        -> last-resort requestFullscreen on a top-frame PLAYER element (NEVER documentElement).
         let js = """
         (function(){
           var el = window.__fsEl;
@@ -485,15 +532,7 @@ document.webkitExitFullscreen=document.exitFullscreen;
               window.__notifyFs(false);
               return 'exit-iframe';
           }
-          var iframes = document.querySelectorAll('iframe');
-          if (iframes.length > 0) {
-              var best = null, area = 0;
-              iframes.forEach(function(f){ try { var r = f.getBoundingClientRect(); var a = r.width * r.height; if (a > area) { area = a; best = f; } } catch(e){} });
-              if (best) {
-                  try { best.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:true},'*'); } catch(e){}
-                  return 'iframe';
-              }
-          }
+          if (el) { document.exitFullscreen(); return 'exit'; }
           var btn = document.querySelector('.ytp-fullscreen-button,.jw-icon-fullscreen,.plyr__control[data-plyr=\\"fullscreen\\"],.vjs-fullscreen-control,.art-icon-fullscreen,media-fullscreen-button,[aria-label*=\\"full screen\\" i],[aria-label*=\\"fullscreen\\" i],[title*=\\"full screen\\" i],[title*=\\"fullscreen\\" i],[data-uia=\\"player-fullscreen-button\\"]');
           if (!btn) {
               document.querySelectorAll('*').forEach(function(x){
@@ -502,11 +541,15 @@ document.webkitExitFullscreen=document.exitFullscreen;
                   }
               });
           }
-          if (btn) { btn.click(); return 'site-button'; }
-          if (window.__fsEl) { document.exitFullscreen(); return 'exit'; }
-          var tgt = document.querySelector('#movie_player,.html5-video-player,netflix-player,.player-player-container,video') || document.documentElement;
-          tgt.requestFullscreen();
-          return 'direct';
+          if (btn) { btn.click(); if (window.__fsEl) return 'site-button'; }
+          var iframes = Array.prototype.slice.call(document.querySelectorAll('iframe'));
+          if (iframes.length) {
+              iframes.forEach(function(f){ try { f.contentWindow.postMessage({tok:'\(msgToken)',cmd:'fs',val:true},'*'); } catch(e){} });
+              return 'iframe';
+          }
+          var tgt = document.querySelector('#movie_player,.html5-video-player,netflix-player,.player-player-container,.jwplayer,.plyr,.video-js,.art-video-player,media-player,video');
+          if (tgt) { tgt.requestFullscreen(); return 'direct'; }
+          return 'none';
         })()
         """
         webView.evaluateJavaScript(js, completionHandler: nil)
